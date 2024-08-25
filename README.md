@@ -41,7 +41,7 @@ To have a Kubelog up and running you must perform some previous additional tasks
 Remember, Backstage Kubelog plugin helps you in showing logs inside Backstage to ease your develoment teams work, but this plugin has no access to the logs in itself, it relies on Kwirth to act as a "log proxy", that is, Kwirth (a component that runs inside your Kubernetes clusters) has access to logs and can "export" them outside the cluster in a secure way, so logs can be consumed anywhere. For example, logs can be shown on Backstage entity pages.
 
 ### 1. Kwirth installation
-We will not cover this subject here, we refer you to [Kwirth installation documentation](https://jfvilaspersonal.github.io/kwirth/#/installation) where you will find more information on how Kwirth works and how to install it. We show here just a summary of what is Kwirth:
+We will not cover this subject here, we refer you to [Kwirth installation documentation](https://jfvilas.github.io/kwirth/#/installation) where you will find more information on how Kwirth works and how to install it. We show here just a summary of what is Kwirth:
 
 1. Kwirth is built around the **one-only-pod concept**.
 2. Kwirth doesn't need any persistenace layer (no database, no network storage, no block storage, no file storage). It uses only Kubernetes storage.
@@ -52,7 +52,7 @@ We will not cover this subject here, we refer you to [Kwirth installation docume
 Once you have a Kubernetes cluster with a Kwirth installation in place (to export logs Kwirth must be accesible from outside your cluster, so you will need to install any flavour of Ingress Controller and an Ingress for publishing Kwirth access). Please **write down your Kwirt external access** (we will need it for configuring Kubelog). For this tutorial we will assume your Kwirth is published on: **http://your-external.dns.name/kwirth**.
 
 Once Kwirth is running perform there two simple actions:
-1. Login to your Kwirth and access to the [API Key section](https://jfvilaspersonal.github.io/kwirth/#/apimanagement?id=api-management) to create an API Key that we need for enabling Kubelog to access Kwirth.
+1. Login to your Kwirth and access to the [API Key section](https://jfvilas.github.io/kwirth/#/apimanagement?id=api-management) to create an API Key that we need for enabling Kubelog to access Kwirth.
 2. The API Key should be 'permanent', the scope has to be 'cluster' and set the expire term long enough. When the API Key has been created, copy the API Key that Kwrith will create for you and is displayed at the API Key list.
 
 This is all you need to do inside Kwirth.
