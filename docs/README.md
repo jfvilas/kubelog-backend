@@ -28,7 +28,7 @@ const backend = createBackend();
 
 // ... other feature additions
 
-+ backend.add(import('@jfvilas/plugin-kubelog-backend'));
++  backend.add(import('@jfvilas/plugin-kubelog-backend'));
 
 // ... other feature additions
 
