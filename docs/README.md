@@ -22,7 +22,6 @@ yarn --cwd packages/backend add @jfvilas/plugin-kubelog-backend @jfvilas/plugin-
 
 ### New Backend System (old backend system has been omitted)
 Next you need to modify your backend index file. In your `packages/backend/src/index.ts` make the following change:
-
 ```diff
     const backend = createBackend();
 
