@@ -2,7 +2,7 @@
 
 This Backstage plugin is the backend for the Kubelog (Kubernetes log viewing) frontend plugin.
 
-***NOTE*: Please refer to [Kubelog Plugin](./plugin-kubelog) general info to understand what is Kubelog, what are the requirements and how do it works.**
+***NOTE*: Please refer to [Kubelog Plugin](https://github.com/jfvilas/kubelog) general info to understand what is Kubelog, what are the requirements and how do it works.**
 
 This [Backstage]((https://backstage.io)) backend plugin is primarily responsible for the following tasks:
 
@@ -132,4 +132,4 @@ Once you have created the groups you can configute the namespace permission addi
           skipMetricsLookup: true
 ```
 
-It's easy to understand. Remember, if you dont want to restrict a namespace, just do not add it to the configuration (like we have done  with 'dev' namespace).
+It's easy to understand. Remember, if you don't want to restrict a namespace, just do not add it to the configuration app-config file, like we have done  with 'dev' namespace.
