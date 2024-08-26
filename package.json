@@ -1,6 +1,6 @@
 {
   "name": "@jfvilas/plugin-kubelog-backend",
-  "version": "0.8.31",
+  "version": "0.8.32",
   "description": "Backstage backend plugin for Kubelog",
   "keywords": [
     "Backstage",
@@ -21,14 +21,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/jfvilasPersonal/kubelog-backend"
+    "url": "https://github.com/jfvilas/kubelog-backend"
   },
   "main": "src/index.ts",
   "types": "src/index.ts",
   "license": "Apache-2.0",
   "author": {
     "name": "Julio Fernandez",
-    "url": "https://github.com/jfvilasPersonal",
+    "url": "https://github.com/jfvilas",
     "email": "jfvilas@outlook.com"
   },
   "publishConfig": {

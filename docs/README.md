@@ -57,7 +57,7 @@ Once Kwirth is running perform there two simple actions:
 This is all you need to do inside Kwirth.
 
 ### 3. Backstage configuration
-for finishing Kubelog config you need to edit your app-config.yaml in order to add Kwirth information to your Kubernetes cluster. Kubelog doesn't have a specific section in the app-config, it just uses the Backstage Kubernetes core component configuration vitamined with some additional properties. Let's suppose you have a Kubernetes configuration like this in your current app-config:
+For finishing Kubelog config you need to edit your app-config.yaml in order to add Kwirth information to your Kubernetes cluster. Kubelog doesn't have a specific section in the app-config, it just uses the Backstage Kubernetes core component configuration vitamined with some additional properties. Let's suppose you have a Kubernetes configuration like this in your current app-config:
 
 ```yaml
 kubernetes:
