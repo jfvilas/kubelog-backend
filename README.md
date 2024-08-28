@@ -133,3 +133,6 @@ Once you have created the groups you can configute the namespace permission addi
 ```
 
 It's easy to understand. Remember, if you don't want to restrict a namespace, just do not add it to the configuration app-config file, like we have done  with 'dev' namespace.
+
+## Roadmap
+  - It is needed to allow selecting a container if the pod has more than one (has to be implemented also in frontend)

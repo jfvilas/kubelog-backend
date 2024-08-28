@@ -21,7 +21,7 @@ import { UserEntity } from '@backstage/catalog-model';
 import { FetchApi } from '@backstage/core-plugin-api';
 
 // Kubelog
-import { Pod, Resources } from '@jfvilas/plugin-kubelog-common';
+import { Resources } from '@jfvilas/plugin-kubelog-common';
 
 class KubelogStaticData {
   public static clusterKwirthData:Map<string,KwirthClusterData>= new Map();
@@ -63,31 +63,36 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
   methods.forEach(method => {
     var clusters=(method.getConfigArray('clusters'));
     clusters.forEach(cluster => {
-      var clName=cluster.getString('name');
-      var kdata:KwirthClusterData={
-        home: cluster.getString('kwirthHome'),
-        apiKey: cluster.getString('kwirthApiKey'),
-        title: cluster.getString('title'),
-        permissions: []
-      };
-      // we now read and format permissions according to destination structure inside KwirthClusterData
-      if (cluster.has('kwirthNamespacePermissions')) {
-        logger.info(`Namespace permisson evaluation will be performed for cluster ${clName}.`);
-        var permNamespaces= cluster.getConfigArray('kwirthNamespacePermissions');
-        for (var ns of permNamespaces) {
-          var namespace=ns.keys()[0];
-          var identityRefs=ns.getStringArray(namespace);
-          identityRefs=identityRefs.map(g => g.toLowerCase());
-          kdata.permissions.push ({ namespace, identityRefs })
+        var clName=cluster.getString('name');
+        if (cluster.has('kwirthHome') && cluster.has('kwirthApiKey')) {
+            var kdata:KwirthClusterData={
+                home: cluster.getString('kwirthHome'),
+                apiKey: cluster.getString('kwirthApiKey'),
+                title: (cluster.has('title')?cluster.getString('title'):'No name'),
+                permissions: []
+            };
+            // we now read and format permissions according to destination structure inside KwirthClusterData
+            if (cluster.has('kwirthNamespacePermissions')) {
+                logger.info(`Namespace permisson evaluation will be performed for cluster ${clName}.`);
+                var permNamespaces= cluster.getConfigArray('kwirthNamespacePermissions');
+                for (var ns of permNamespaces) {
+                var namespace=ns.keys()[0];
+                var identityRefs=ns.getStringArray(namespace);
+                identityRefs=identityRefs.map(g => g.toLowerCase());
+                kdata.permissions.push ({ namespace, identityRefs })
+                }
+            }
+            else {
+                logger.info(`Cluster ${clName} will have no namespace restrictions`);
+                kdata.permissions=[];
+            }
+
+            logger.info(`Kwirth for ${clName} is located at ${kdata.home}`);
+            KubelogStaticData.clusterKwirthData.set(clName,kdata);
         }
-      }
-      else {
-        logger.info(`Cluster ${clName} will have no namespace restrictions`);
-        kdata.permissions=[];
-      }
-      
-      logger.info(`Kwirth for ${clName} is located at ${kdata.home}`);
-      KubelogStaticData.clusterKwirthData.set(clName,kdata);
+        else {
+            logger.warn(`Cluster ${clName} has no Kwirth onformation. Will not be used for Kubelog log viewing`);
+        }
     });
   });
 
@@ -108,7 +113,7 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
         return fetch(input, init);
       },
     };
-  };    
+  };
 
   const getValidResources = async (entityName:string) => {
     var resourceList:Resources[]=[];
@@ -127,52 +132,86 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
   }
 
   // remove from the resourcesList all the resources user is no authorized to view according to kubelog permissions config
-  const applyPermissions = (resourcesList:Resources[], userEntityRef:string, userGroups:string[]) => {
+  // const applyPermissions = (resourcesList:Resources[], userEntityRef:string, userGroups:string[]) => {
+  //   for (var cluster of resourcesList) {
+  //     var clusterKwirthRules=KubelogStaticData.clusterKwirthData.get(cluster.name)?.permissions;
+  //     var sortList:Pod[]=[];
+
+  //     for (var pod of cluster.data) {
+  //       var rule=clusterKwirthRules?.find(ns => ns.namespace===pod.namespace);
+  //       if (rule) {
+  //         if (rule.identityRefs.includes(userEntityRef.toLowerCase())) {
+  //           // a user ref has been found
+  //           sortList.push(pod);
+  //         }
+  //         else {
+  //           var joinResult=rule?.identityRefs.filter(identityRef => userGroups.includes(identityRef));
+  //           if (joinResult && joinResult.length>0) {
+  //             // a group ref match has been found
+  //             sortList.push(pod);
+  //           }
+  //         }
+  //       }
+  //       else {
+  //         // no restrictions for this namespace
+  //         sortList.push(pod);
+  //       }
+  //     }
+  //     cluster.data=sortList;
+  //   }
+  //   return resourcesList;
+  // }
+
+  const getAccessKey = async (clusterName:string, entityName:string, kwirthResource:string, userName:string) => {
+    var url=KubelogStaticData.clusterKwirthData.get(clusterName)?.home as string;
+    var apiKey=KubelogStaticData.clusterKwirthData.get(clusterName)?.apiKey;
+
+    var payload={ type:'volatile', resource: kwirthResource, description:`Backstage API key for user ${userName} accessing component ${entityName}`, expire:Date.now()+60*60*1000};
+    var response=await fetch(url+'/key',{method:'POST', body:JSON.stringify(payload), headers:{'Content-Type':'application/json', Authorization:'Bearer '+apiKey}});
+    var data=await response.json();
+    return data.accessKey;
+  }
+
+  const addAccessKeys = async (resourcesList:Resources[], entityName:string, userEntityRef:string, userGroups:string[]) => {
+    var principal=userEntityRef.split(':')[1];
+    var username=principal.split('/')[1];
+
     for (var cluster of resourcesList) {
       var clusterKwirthRules=KubelogStaticData.clusterKwirthData.get(cluster.name)?.permissions;
-      var sortList:Pod[]=[];
 
       for (var pod of cluster.data) {
         var rule=clusterKwirthRules?.find(ns => ns.namespace===pod.namespace);
+        var allowed=false;
         if (rule) {
           if (rule.identityRefs.includes(userEntityRef.toLowerCase())) {
             // a user ref has been found
-            sortList.push(pod);
+            allowed=true;
           }
           else {
             var joinResult=rule?.identityRefs.filter(identityRef => userGroups.includes(identityRef));
             if (joinResult && joinResult.length>0) {
               // a group ref match has been found
-              sortList.push(pod);
+              allowed=true;
             }
           }
         }
         else {
           // no restrictions for this namespace
-          sortList.push(pod);
+          allowed=true;
+        }
+        if (allowed) {
+          var kwirthResource=`filter:${pod.namespace}::${pod.name}:`;
+          pod.accessKey=await getAccessKey(cluster.name, entityName, kwirthResource, username);          
         }
       }
-      cluster.data=sortList;
     }
     return resourcesList;
-  }
-
-  const getAccessKey = async (clusterName:string, entity:string, resource:string, user:string) => {
-    var url=KubelogStaticData.clusterKwirthData.get(clusterName)?.home as string;
-    var apiKey=KubelogStaticData.clusterKwirthData.get(clusterName)?.apiKey;
-
-    var payload={ type:'volatile', resource, description:`Backstage API key for user ${user} accessing component ${entity}`, expire:Date.now()+60*60*1000};
-    var response=await fetch(url+'/key',{method:'POST', body:JSON.stringify(payload), headers:{'Content-Type':'application/json', Authorization:'Bearer '+apiKey}});
-    var data=await response.json();
-    return data.accessKey;
   }
 
   router.post('/start', async (req, res) => {
     // obtain basic user info
     const credentials = await httpAuth.credentials(req, { allow: ['user'] });
     const info = await userInfo.getUserInfo(credentials);
-    var principal=info.userEntityRef.split(':')[1];
-    var username=principal.split('/')[1];
 
     // connecto to catalog to obtain IAM user info, like group membership (memberOf)
     const { token } = await auth.getPluginRequestToken({
@@ -191,21 +230,49 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
     var resourcesList:Resources[]=await getValidResources(req.body.metadata.name);
 
     // remove unauthorized resources (according to group memberships and kubelog config in app-config)
-    resourcesList=applyPermissions(resourcesList, info.userEntityRef, userGroupsRefs);
+    resourcesList=await addAccessKeys(resourcesList, req.body.metadata.name, info.userEntityRef, userGroupsRefs);
 
-    // remove clusters that contain no pods
-    resourcesList=resourcesList.filter(cluster => cluster.data.length>0);
-
-    // obtain apikeys for the final list
-    for (const cluster of resourcesList) {
-      for (const pod of cluster.data) {
-        //+++ TODO: allow selecting a container if the pod has more than one (needs to be implemented also in frontend)
-        var resource=`filter:${pod.namespace}::${pod.name}:`;
-        pod.accessKey=await getAccessKey(cluster.name, req.body.metadata.name, resource, username);
-      }
-    }
     res.status(200).send(resourcesList);
   });
+
+  // router.post('/start', async (req, res) => {
+  //   // obtain basic user info
+  //   const credentials = await httpAuth.credentials(req, { allow: ['user'] });
+  //   const info = await userInfo.getUserInfo(credentials);
+  //   var principal=info.userEntityRef.split(':')[1];
+  //   var username=principal.split('/')[1];
+
+  //   // connecto to catalog to obtain IAM user info, like group membership (memberOf)
+  //   const { token } = await auth.getPluginRequestToken({
+  //     onBehalfOf: await auth.getOwnServiceCredentials(),
+  //     targetPluginId: 'catalog'
+  //   });
+  //   const catalogClient = new CatalogClient({
+  //     discoveryApi: discovery,
+  //     fetchApi: createAuthFetchApi(token),
+  //   });
+  //   const entity = await catalogClient.getEntityByRef(info.userEntityRef) as UserEntity;
+  //   var userGroupsRefs:string[]=[];
+  //   if (entity?.spec.memberOf) userGroupsRefs=entity?.spec.memberOf;
+
+  //   // get a resource list
+  //   var resourcesList:Resources[]=await getValidResources(req.body.metadata.name);
+
+  //   // remove unauthorized resources (according to group memberships and kubelog config in app-config)
+  //   resourcesList=applyPermissions(resourcesList, info.userEntityRef, userGroupsRefs);
+
+  //   // remove clusters that contain no pods
+  //   resourcesList=resourcesList.filter(cluster => cluster.data.length>0);
+
+  //   // obtain apikeys for the final list
+  //   for (const cluster of resourcesList) {
+  //     for (const pod of cluster.data) {
+  //       var kwirthResource=`filter:${pod.namespace}::${pod.name}:`;
+  //       pod.accessKey=await getAccessKey(cluster.name, req.body.metadata.name, kwirthResource, username);
+  //     }
+  //   }
+  //   res.status(200).send(resourcesList);
+  // });
 
   return router;
 }
