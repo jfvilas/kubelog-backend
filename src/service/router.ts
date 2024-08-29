@@ -15,7 +15,7 @@ limitations under the License.
 */
 import express from 'express';
 import Router from 'express-promise-router';
-import { AuthService, CacheService, DiscoveryService, HttpAuthService, LoggerService, RootConfigService, UrlReaderService, UserInfoService } from '@backstage/backend-plugin-api';
+import { AuthService, BackstageUserInfo, CacheService, DiscoveryService, HttpAuthService, LoggerService, RootConfigService, UrlReaderService, UserInfoService } from '@backstage/backend-plugin-api';
 import { CatalogClient } from '@backstage/catalog-client';
 import { UserEntity } from '@backstage/catalog-model';
 import { FetchApi } from '@backstage/core-plugin-api';
@@ -49,59 +49,71 @@ type KwirthClusterData = {
   permissions: KwirthNamespacePermissions[];
 }
 
+const loadClusters = (logger:LoggerService, config:RootConfigService) => {
+    var locatingMethods=config.getConfigArray('kubernetes.clusterLocatorMethods');
+
+    locatingMethods.forEach(method => {
+
+      var clusters=(method.getConfigArray('clusters'));
+
+      clusters.forEach(cluster => {
+
+          var clName=cluster.getString('name');
+          if (cluster.has('kwirthHome') && cluster.has('kwirthApiKey')) {
+              var kdata:KwirthClusterData={
+                  home: cluster.getString('kwirthHome'),
+                  apiKey: cluster.getString('kwirthApiKey'),
+                  title: (cluster.has('title')?cluster.getString('title'):'No name'),
+                  permissions: []
+              };
+              // we now read and format permissions according to destination structure inside KwirthClusterData
+              if (cluster.has('kwirthNamespacePermissions')) {
+                  logger.info(`Namespace permisson evaluation will be performed for cluster ${clName}.`);
+                  var permNamespaces= cluster.getConfigArray('kwirthNamespacePermissions');
+                  for (var ns of permNamespaces) {
+                  var namespace=ns.keys()[0];
+                  var identityRefs=ns.getStringArray(namespace);
+                  identityRefs=identityRefs.map(g => g.toLowerCase());
+                  kdata.permissions.push ({ namespace, identityRefs })
+                  }
+              }
+              else {
+                  logger.info(`Cluster ${clName} will have no namespace restrictions`);
+                  kdata.permissions=[];
+              }
+  
+              logger.info(`Kwirth for ${clName} is located at ${kdata.home}`);
+              KubelogStaticData.clusterKwirthData.set(clName,kdata);
+          }
+          else {
+              logger.warn(`Cluster ${clName} has no Kwirth onformation. Will not be used for Kubelog log viewing`);
+          }
+      });
+    });
+  
+}
+
+/**
+ * 
+ * @param options core services we need for kubelog to work
+ * @returns an express Router
+ */
 async function createRouter(options: KubelogRouterOptions): Promise<express.Router> {
   const { config, logger, userInfo, auth, httpAuth, discovery } = options;
 
   logger.info('Loading static config');
 
   if (!config.has('kubernetes.clusterLocatorMethods')) {
-    logger.error(`Kueblog will not start, there is no 'clusterLocatorMethods' defined in app-confg`);
-    throw new Error('Kueblog backend will not be available');
+    logger.error(`Kueblog will not start, there is no 'clusterLocatorMethods' defined in app-confg.`);
+    throw new Error('Kueblog backend will not be available.');
   }
-  var methods=config.getConfigArray('kubernetes.clusterLocatorMethods');
-
-  methods.forEach(method => {
-    var clusters=(method.getConfigArray('clusters'));
-    clusters.forEach(cluster => {
-        var clName=cluster.getString('name');
-        if (cluster.has('kwirthHome') && cluster.has('kwirthApiKey')) {
-            var kdata:KwirthClusterData={
-                home: cluster.getString('kwirthHome'),
-                apiKey: cluster.getString('kwirthApiKey'),
-                title: (cluster.has('title')?cluster.getString('title'):'No name'),
-                permissions: []
-            };
-            // we now read and format permissions according to destination structure inside KwirthClusterData
-            if (cluster.has('kwirthNamespacePermissions')) {
-                logger.info(`Namespace permisson evaluation will be performed for cluster ${clName}.`);
-                var permNamespaces= cluster.getConfigArray('kwirthNamespacePermissions');
-                for (var ns of permNamespaces) {
-                var namespace=ns.keys()[0];
-                var identityRefs=ns.getStringArray(namespace);
-                identityRefs=identityRefs.map(g => g.toLowerCase());
-                kdata.permissions.push ({ namespace, identityRefs })
-                }
-            }
-            else {
-                logger.info(`Cluster ${clName} will have no namespace restrictions`);
-                kdata.permissions=[];
-            }
-
-            logger.info(`Kwirth for ${clName} is located at ${kdata.home}`);
-            KubelogStaticData.clusterKwirthData.set(clName,kdata);
-        }
-        else {
-            logger.warn(`Cluster ${clName} has no Kwirth onformation. Will not be used for Kubelog log viewing`);
-        }
-    });
-  });
-
+  loadClusters(logger, config);
   logger.info('Static config loaded');
 
   const router = Router();
   router.use(express.json());
 
-  // we need this function to be able to invoke another backend plugin passing a token
+  // we need this function to be able to invoke another backend plugin passing an authorization token
   const createAuthFetchApi = (token: string): FetchApi => {
     return {
       fetch: async (input, init) => {
@@ -115,6 +127,11 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
     };
   };
 
+  /**
+   * Invokes Kwirth to obtain a list of pods that are tagged with the kubernetes-id of the entity we are looking for.
+   * @param entityName name of the tagge dentity
+   * @returns a Resources[] (each Resources is list of pods in a cluster).
+   */
   const getValidResources = async (entityName:string) => {
     var resourceList:Resources[]=[];
 
@@ -131,37 +148,14 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
     return resourceList;
   }
 
-  // remove from the resourcesList all the resources user is no authorized to view according to kubelog permissions config
-  // const applyPermissions = (resourcesList:Resources[], userEntityRef:string, userGroups:string[]) => {
-  //   for (var cluster of resourcesList) {
-  //     var clusterKwirthRules=KubelogStaticData.clusterKwirthData.get(cluster.name)?.permissions;
-  //     var sortList:Pod[]=[];
-
-  //     for (var pod of cluster.data) {
-  //       var rule=clusterKwirthRules?.find(ns => ns.namespace===pod.namespace);
-  //       if (rule) {
-  //         if (rule.identityRefs.includes(userEntityRef.toLowerCase())) {
-  //           // a user ref has been found
-  //           sortList.push(pod);
-  //         }
-  //         else {
-  //           var joinResult=rule?.identityRefs.filter(identityRef => userGroups.includes(identityRef));
-  //           if (joinResult && joinResult.length>0) {
-  //             // a group ref match has been found
-  //             sortList.push(pod);
-  //           }
-  //         }
-  //       }
-  //       else {
-  //         // no restrictions for this namespace
-  //         sortList.push(pod);
-  //       }
-  //     }
-  //     cluster.data=sortList;
-  //   }
-  //   return resourcesList;
-  // }
-
+  /**
+   * This function obtains an accesskey for streaming a concrete log in a specific pod
+   * @param clusterName the name of the cluster
+   * @param entityName the name of the Backstage entity we are streaming for
+   * @param kwirthResource the Resource ID that identifies the log we want to stream
+   * @param userName the name of the Backstage user (for logging purposes inside Kwirth)
+   * @returns a Kwirth accessKey
+   */
   const getAccessKey = async (clusterName:string, entityName:string, kwirthResource:string, userName:string) => {
     var url=KubelogStaticData.clusterKwirthData.get(clusterName)?.home as string;
     var apiKey=KubelogStaticData.clusterKwirthData.get(clusterName)?.apiKey;
@@ -172,6 +166,14 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
     return data.accessKey;
   }
 
+  /**
+   * Adds access keys to the list of kubernetes resources related with the entity
+   * @param resourcesList current list of resources (whcih have no access keys yet)
+   * @param entityName name of the entoty we want to stream logs
+   * @param userEntityRef a user entoty ref for the current user ('user:group/id')
+   * @param userGroups a list of the IAM groups the user belongs to
+   * @returns the resource l ist populated with access keys that the user is permitted to use
+   */
   const addAccessKeys = async (resourcesList:Resources[], entityName:string, userEntityRef:string, userGroups:string[]) => {
     var principal=userEntityRef.split(':')[1];
     var username=principal.split('/')[1];
@@ -208,71 +210,45 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
     return resourcesList;
   }
 
+  /**
+   * builds a list of groups (expressed as identity refs) that the user belongs to.
+   * @param userInfo Backstage user info of the user to search groups for
+   * @returns an array of group refs in canonical form
+   */
+  const getUserGroups = async (userInfo:BackstageUserInfo) => {
+    const { token } = await auth.getPluginRequestToken({
+        onBehalfOf: await auth.getOwnServiceCredentials(),
+        targetPluginId: 'catalog'
+    });
+    const catalogClient = new CatalogClient({
+        discoveryApi: discovery,
+        fetchApi: createAuthFetchApi(token),
+    });
+
+    const entity = await catalogClient.getEntityByRef(userInfo.userEntityRef) as UserEntity;
+    var userGroupsRefs:string[]=[];
+    if (entity?.spec.memberOf) userGroupsRefs=entity?.spec.memberOf;  
+    return userGroupsRefs;
+  }
+
+
+  // this endpoints receives entity from the kubelog plugin and builds a list of resurces with api keys
   router.post('/start', async (req, res) => {
     // obtain basic user info
     const credentials = await httpAuth.credentials(req, { allow: ['user'] });
     const info = await userInfo.getUserInfo(credentials);
 
-    // connecto to catalog to obtain IAM user info, like group membership (memberOf)
-    const { token } = await auth.getPluginRequestToken({
-      onBehalfOf: await auth.getOwnServiceCredentials(),
-      targetPluginId: 'catalog'
-    });
-    const catalogClient = new CatalogClient({
-      discoveryApi: discovery,
-      fetchApi: createAuthFetchApi(token),
-    });
-    const entity = await catalogClient.getEntityByRef(info.userEntityRef) as UserEntity;
-    var userGroupsRefs:string[]=[];
-    if (entity?.spec.memberOf) userGroupsRefs=entity?.spec.memberOf;
+    // get user groups list
+    var userGroupsRefs=await getUserGroups(info);
 
     // get a resource list
     var resourcesList:Resources[]=await getValidResources(req.body.metadata.name);
 
-    // remove unauthorized resources (according to group memberships and kubelog config in app-config)
+    // add access keys to authorized resources (according to group memberships and kubelog config in app-config)
     resourcesList=await addAccessKeys(resourcesList, req.body.metadata.name, info.userEntityRef, userGroupsRefs);
 
     res.status(200).send(resourcesList);
   });
-
-  // router.post('/start', async (req, res) => {
-  //   // obtain basic user info
-  //   const credentials = await httpAuth.credentials(req, { allow: ['user'] });
-  //   const info = await userInfo.getUserInfo(credentials);
-  //   var principal=info.userEntityRef.split(':')[1];
-  //   var username=principal.split('/')[1];
-
-  //   // connecto to catalog to obtain IAM user info, like group membership (memberOf)
-  //   const { token } = await auth.getPluginRequestToken({
-  //     onBehalfOf: await auth.getOwnServiceCredentials(),
-  //     targetPluginId: 'catalog'
-  //   });
-  //   const catalogClient = new CatalogClient({
-  //     discoveryApi: discovery,
-  //     fetchApi: createAuthFetchApi(token),
-  //   });
-  //   const entity = await catalogClient.getEntityByRef(info.userEntityRef) as UserEntity;
-  //   var userGroupsRefs:string[]=[];
-  //   if (entity?.spec.memberOf) userGroupsRefs=entity?.spec.memberOf;
-
-  //   // get a resource list
-  //   var resourcesList:Resources[]=await getValidResources(req.body.metadata.name);
-
-  //   // remove unauthorized resources (according to group memberships and kubelog config in app-config)
-  //   resourcesList=applyPermissions(resourcesList, info.userEntityRef, userGroupsRefs);
-
-  //   // remove clusters that contain no pods
-  //   resourcesList=resourcesList.filter(cluster => cluster.data.length>0);
-
-  //   // obtain apikeys for the final list
-  //   for (const cluster of resourcesList) {
-  //     for (const pod of cluster.data) {
-  //       var kwirthResource=`filter:${pod.namespace}::${pod.name}:`;
-  //       pod.accessKey=await getAccessKey(cluster.name, req.body.metadata.name, kwirthResource, username);
-  //     }
-  //   }
-  //   res.status(200).send(resourcesList);
-  // });
 
   return router;
 }
