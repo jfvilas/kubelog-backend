@@ -22,10 +22,8 @@ import { FetchApi } from '@backstage/core-plugin-api';
 
 // Kubelog
 import { Resources } from '@jfvilas/plugin-kubelog-common';
-
-class KubelogStaticData {
-  public static clusterKwirthData:Map<string,KwirthClusterData>= new Map();
-}
+import { loadClusters } from './config';
+import { KubelogStaticData } from '../model/KwirthStaticData';
 
 export type KubelogRouterOptions = {
   discovery: DiscoveryService;
@@ -38,61 +36,6 @@ export type KubelogRouterOptions = {
   httpAuth: HttpAuthService;
 };
 
-type KwirthNamespacePermissions = {
-  namespace:string;
-  identityRefs:string[]
-}
-type KwirthClusterData = {
-  home: string;
-  apiKey: string;
-  title: string;
-  permissions: KwirthNamespacePermissions[];
-}
-
-const loadClusters = (logger:LoggerService, config:RootConfigService) => {
-    var locatingMethods=config.getConfigArray('kubernetes.clusterLocatorMethods');
-
-    locatingMethods.forEach(method => {
-
-      var clusters=(method.getConfigArray('clusters'));
-
-      clusters.forEach(cluster => {
-
-          var clName=cluster.getString('name');
-          if (cluster.has('kwirthHome') && cluster.has('kwirthApiKey')) {
-              var kdata:KwirthClusterData={
-                  home: cluster.getString('kwirthHome'),
-                  apiKey: cluster.getString('kwirthApiKey'),
-                  title: (cluster.has('title')?cluster.getString('title'):'No name'),
-                  permissions: []
-              };
-              // we now read and format permissions according to destination structure inside KwirthClusterData
-              if (cluster.has('kwirthNamespacePermissions')) {
-                  logger.info(`Namespace permisson evaluation will be performed for cluster ${clName}.`);
-                  var permNamespaces= cluster.getConfigArray('kwirthNamespacePermissions');
-                  for (var ns of permNamespaces) {
-                  var namespace=ns.keys()[0];
-                  var identityRefs=ns.getStringArray(namespace);
-                  identityRefs=identityRefs.map(g => g.toLowerCase());
-                  kdata.permissions.push ({ namespace, identityRefs })
-                  }
-              }
-              else {
-                  logger.info(`Cluster ${clName} will have no namespace restrictions`);
-                  kdata.permissions=[];
-              }
-  
-              logger.info(`Kwirth for ${clName} is located at ${kdata.home}`);
-              KubelogStaticData.clusterKwirthData.set(clName,kdata);
-          }
-          else {
-              logger.warn(`Cluster ${clName} has no Kwirth onformation. Will not be used for Kubelog log viewing`);
-          }
-      });
-    });
-  
-}
-
 /**
  * 
  * @param options core services we need for kubelog to work
@@ -104,7 +47,7 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
   logger.info('Loading static config');
 
   if (!config.has('kubernetes.clusterLocatorMethods')) {
-    logger.error(`Kueblog will not start, there is no 'clusterLocatorMethods' defined in app-confg.`);
+    logger.error(`Kueblog will not start, there is no 'clusterLocatorMethods' defined in app-config.`);
     throw new Error('Kueblog backend will not be available.');
   }
   loadClusters(logger, config);
@@ -179,7 +122,7 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
     var username=principal.split('/')[1];
 
     for (var cluster of resourcesList) {
-      var clusterKwirthRules=KubelogStaticData.clusterKwirthData.get(cluster.name)?.permissions;
+      var clusterKwirthRules=KubelogStaticData.clusterKwirthData.get(cluster.name)?.namespacePermissions;
 
       for (var pod of cluster.data) {
         var rule=clusterKwirthRules?.find(ns => ns.namespace===pod.namespace);
