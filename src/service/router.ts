@@ -185,6 +185,7 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
     var userGroupsRefs=await getUserGroups(info);
 
     // get a resource list
+    //+++ control error here (maybe we cannot conntact the cluster, for example)
     var resourcesList:Resources[]=await getValidResources(req.body.metadata.name);
 
     // add access keys to authorized resources (according to group memberships and kubelog config in app-config)
