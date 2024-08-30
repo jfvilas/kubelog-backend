@@ -23,7 +23,7 @@ import { FetchApi } from '@backstage/core-plugin-api';
 // Kubelog
 import { Resources } from '@jfvilas/plugin-kubelog-common';
 import { loadClusters } from './config';
-import { KubelogStaticData } from '../model/KwirthStaticData';
+import { KubelogStaticData } from '../model/KubelogStaticData';
 
 export type KubelogRouterOptions = {
   discovery: DiscoveryService;
@@ -42,16 +42,25 @@ export type KubelogRouterOptions = {
  * @returns an express Router
  */
 async function createRouter(options: KubelogRouterOptions): Promise<express.Router> {
-  const { config, logger, userInfo, auth, httpAuth, discovery } = options;
+    const { config, logger, userInfo, auth, httpAuth, discovery } = options;
 
-  logger.info('Loading static config');
+    logger.info('Loading static config');
 
-  if (!config.has('kubernetes.clusterLocatorMethods')) {
-    logger.error(`Kueblog will not start, there is no 'clusterLocatorMethods' defined in app-config.`);
-    throw new Error('Kueblog backend will not be available.');
-  }
-  loadClusters(logger, config);
-  logger.info('Static config loaded');
+    if (!config.has('kubernetes.clusterLocatorMethods')) {
+        logger.error(`Kueblog will not start, there is no 'clusterLocatorMethods' defined in app-config.`);
+        throw new Error('Kueblog backend will not be available.');
+    }
+    loadClusters(logger, config);
+    logger.info('Static config loaded');
+    if (config.subscribe) {
+        config.subscribe( () => {
+            logger.warn('Change detected on app-config, Kubelog will update config.');
+            loadClusters(logger, config);
+        });
+    }
+    else {
+        logger.info('Kubelog cannot subscribe to config changes.');
+    }
 
   const router = Router();
   router.use(express.json());
@@ -78,10 +87,10 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
   const getValidResources = async (entityName:string) => {
     var resourceList:Resources[]=[];
 
-    for (const name of KubelogStaticData.clusterKwirthData.keys()) {
-      var url=KubelogStaticData.clusterKwirthData.get(name)?.home as string;
-      var apiKey=KubelogStaticData.clusterKwirthData.get(name)?.apiKey;
-      var title=KubelogStaticData.clusterKwirthData.get(name)?.title;
+    for (const name of KubelogStaticData.clusterKubelogData.keys()) {
+      var url=KubelogStaticData.clusterKubelogData.get(name)?.home as string;
+      var apiKey=KubelogStaticData.clusterKubelogData.get(name)?.apiKey;
+      var title=KubelogStaticData.clusterKubelogData.get(name)?.title;
       var queryUrl=url+`/managecluster/find?label=backstage.io%2fkubernetes-id&entity=${entityName}`;
       var fetchResp = await fetch (queryUrl, {headers:{'Authorization':'Bearer '+apiKey}});
       var jsonResp=await fetchResp.json();
@@ -100,8 +109,8 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
    * @returns a Kwirth accessKey
    */
   const getAccessKey = async (clusterName:string, entityName:string, kwirthResource:string, userName:string) => {
-    var url=KubelogStaticData.clusterKwirthData.get(clusterName)?.home as string;
-    var apiKey=KubelogStaticData.clusterKwirthData.get(clusterName)?.apiKey;
+    var url=KubelogStaticData.clusterKubelogData.get(clusterName)?.home as string;
+    var apiKey=KubelogStaticData.clusterKubelogData.get(clusterName)?.apiKey;
 
     var payload={ type:'volatile', resource: kwirthResource, description:`Backstage API key for user ${userName} accessing component ${entityName}`, expire:Date.now()+60*60*1000};
     var response=await fetch(url+'/key',{method:'POST', body:JSON.stringify(payload), headers:{'Content-Type':'application/json', Authorization:'Bearer '+apiKey}});
@@ -122,7 +131,7 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
     var username=principal.split('/')[1];
 
     for (var cluster of resourcesList) {
-      var clusterKwirthRules=KubelogStaticData.clusterKwirthData.get(cluster.name)?.namespacePermissions;
+      var clusterKwirthRules=KubelogStaticData.clusterKubelogData.get(cluster.name)?.namespacePermissions;
 
       for (var pod of cluster.data) {
         var rule=clusterKwirthRules?.find(ns => ns.namespace===pod.namespace);

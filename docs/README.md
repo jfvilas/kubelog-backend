@@ -75,8 +75,8 @@ kubernetes:
 ```
 
 We need to add 2 properties to the cluster configuration:
-- kwirthHome: the home URL of the Kwirth installation.
-- kwirthApiKey: The API key we created before.
+- kubelogKwirthHome: the home URL of the Kwirth installation.
+- kubelogKwirthApiKey: The API key we created before.
 
 The kubernetes section should look something like this:
 ```diff
@@ -89,8 +89,8 @@ kubernetes:
         - url: https://kuebeapi.your-cluster.com
           name: k3d-cluster
           title: 'Kubernetes local'
-+         kwirthHome: http://your-external.dns.name/kwirth
-+         kwirthApiKey: '40f5ea6c-bac3-df2f-d184-c9f3ab106ba9|permanent|cluster::::'
++         kubelogKwirthHome: http://your-external.dns.name/kwirth
++         kubelogKwirthApiKey: '40f5ea6c-bac3-df2f-d184-c9f3ab106ba9|permanent|cluster::::'
           authProvider: 'serviceAccount'
           skipTLSVerify: true
           skipMetricsLookup: true
@@ -114,16 +114,16 @@ The way you can mnage this in Kubelog is via Group entities of Backstage. That i
 
 **NOTE**: for simplicity we assume all your User refs and Group refs live in a Backstage namespace named 'default'
 
-Once you have created the groups you can configute the namespace permission adding one additioal pooperty to the cluster definition, it is names : kwirthNamespacePermissions. This is an array of namespaces, where for each namespace you must declare an array of identity refs (that is, users or groups). The example below is self-explaining.
+Once you have created the groups you can configute the namespace permission adding one additioal pooperty to the cluster definition, it is names : kubelogNamespacePermissions. This is an array of namespaces, where for each namespace you must declare an array of identity refs (that is, users or groups). The example below is self-explaining.
 
 ```diff
       clusters:
         - url: https://kuebeapi.your-cluster.com
           name: k3d-cluster
           title: 'Kubernetes local'
-          kwirthHome: http://your-external.dns.name/kwirth
-          kwirthApiKey: '40f5ea6c-bac3-df2f-d184-c9f3ab106ba9|permanent|cluster::::'
-+         kwirthNamespacePermissions:
+          kubelogKwirthHome: http://your-external.dns.name/kwirth
+          kubelogKwirthApiKey: '40f5ea6c-bac3-df2f-d184-c9f3ab106ba9|permanent|cluster::::'
++         kubelogNamespacePermissions:
 +           - stage: ['group:default/devops', 'group:default/admin']
 +           - production: ['group:default/admin', 'user:default/nicklaus-wirth']
           authProvider: 'serviceAccount'

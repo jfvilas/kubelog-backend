@@ -14,10 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 class KubelogStaticData {
-    public static clusterKwirthData:Map<string,KwirthClusterData>= new Map();
+    public static clusterKubelogData:Map<string,KubelogClusterData>= new Map();
 }
 
-type KwirthNamespacePermissions = {
+type KubelogNamespacePermissions = {
     namespace:string;
     identityRefs:string[];
 }
@@ -43,20 +43,20 @@ type KwirthNamespacePermissions = {
         ]
     }    
 */
-export type KwirthPodPermissions = {
+export type KubelogPodPermissions = {
     namespace:string;
     allow?:Map<string,string[]|undefined>;
     restrict?:Map<string,string[]|undefined>;
     deny?:Map<string,string[]|undefined>;
 }
 
-export type KwirthClusterData = {
+export type KubelogClusterData = {
     home: string;
     apiKey: string;
     title: string;
-    namespacePermissions: KwirthNamespacePermissions[];
-    viewPermissions: KwirthPodPermissions[];
-    restartPermissions: KwirthPodPermissions[];
+    namespacePermissions: KubelogNamespacePermissions[];
+    viewPermissions: KubelogPodPermissions[];
+    restartPermissions: KubelogPodPermissions[];
 }
 
 export { KubelogStaticData }

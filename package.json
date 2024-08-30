@@ -1,6 +1,6 @@
 {
   "name": "@jfvilas/plugin-kubelog-backend",
-  "version": "0.8.35",
+  "version": "0.8.36",
   "description": "Backstage backend plugin for Kubelog",
   "keywords": [
     "Backstage",

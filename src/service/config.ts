@@ -14,19 +14,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 import { LoggerService, RootConfigService } from '@backstage/backend-plugin-api';
-import { KubelogStaticData, KwirthClusterData, KwirthPodPermissions } from '../model/KwirthStaticData';
+import { KubelogStaticData, KubelogClusterData, KubelogPodPermissions } from '../model/KubelogStaticData';
 import { Config } from '@backstage/config';
 
 /**
- * loads kwirthNamespacePermissions setting from app-config xml
+ * loads kubelogNamespacePermissions setting from app-config xml
  * @param logger Logger service
  * @param cluster Cluster config as it is read form app-config
  * @param kdata KwirtClusterData being processed
  */
-const loadNamespacePermission = (logger:LoggerService, cluster:Config, kdata:KwirthClusterData) => {
-    if (cluster.has('kwirthNamespacePermissions')) {
+const loadNamespacePermission = (logger:LoggerService, cluster:Config, kdata:KubelogClusterData) => {
+    if (cluster.has('kwirthNamespacePermissions') || cluster.has('kubelogNamespacePermissions')) {
+        if (cluster.has('kwirthNamespacePermissions')) {
+            logger.warn('"kwirthNamespacePermissions" is deprecated, it will be retired on 2025-08-25. Please use name "kubelogNamespacePermissions".')
+        }
         logger.info(`Namespace permisson evaluation will be performed for cluster ${cluster.getString('name')}.`);
-        var permNamespaces= cluster.getConfigArray('kwirthNamespacePermissions');
+        var permNamespaces= (cluster.getOptionalConfigArray('kwirthNamespacePermissions') || cluster.getOptionalConfigArray('kubelogNamespacePermissions'))!;
         for (var ns of permNamespaces) {
             var namespace=ns.keys()[0];
             var identityRefs=ns.getStringArray(namespace);
@@ -59,12 +62,12 @@ const loadPodRules = (config:Config, id:string) => {
  * @param kdata KwirtClusterData being processed
  */
 const loadPodPermissions = (configKey:string, logger:LoggerService, cluster:Config) => {
-    var clusterPodPermissions:KwirthPodPermissions[]=[];
+    var clusterPodPermissions:KubelogPodPermissions[]=[];
     if (cluster.has(configKey)) {
         var namespaceList=cluster.getConfigArray(configKey);
         for (var ns of namespaceList) {
             var namespaceName=ns.keys()[0];
-            var podPermissions:KwirthPodPermissions={ namespace:namespaceName };
+            var podPermissions:KubelogPodPermissions={ namespace:namespaceName };
 
             if (ns.getConfig(namespaceName).has('allow')) podPermissions.allow=loadPodRules(ns.getConfig(namespaceName), 'allow');
             if (ns.getConfig(namespaceName).has('restrict')) podPermissions.restrict=loadPodRules(ns.getConfig(namespaceName), 'restrict');
@@ -84,6 +87,7 @@ const loadPodPermissions = (configKey:string, logger:LoggerService, cluster:Conf
  * @param config core service for reading config info
  */
 const loadClusters = (logger:LoggerService, config:RootConfigService) => {
+    KubelogStaticData.clusterKubelogData.clear();
     var locatingMethods=config.getConfigArray('kubernetes.clusterLocatorMethods');
 
     locatingMethods.forEach(method => {
@@ -93,27 +97,40 @@ const loadClusters = (logger:LoggerService, config:RootConfigService) => {
       clusters.forEach(cluster => {
 
         var clName=cluster.getString('name');
-        if (cluster.has('kwirthHome') && cluster.has('kwirthApiKey')) {
-            var kdata:KwirthClusterData={
-                home: cluster.getString('kwirthHome'),
-                apiKey: cluster.getString('kwirthApiKey'),
-                title: (cluster.has('title')?cluster.getString('title'):'No name'),
+        if ((cluster.has('kwirthHome') || cluster.has('kubelogKwirthHome')) && (cluster.has('kwirthApiKey') || cluster.has('kubelogKwirthApiKey'))) {
+            if (cluster.has('kwirthHome')) {
+                logger.warn('"kwirthHome" is deprecated, it will be retired on 2025-08-25. Please use name "kubelogHome".');
+            }
+            if (cluster.has('kwirthApiKey')) {
+                logger.warn('"kwirthApiKey" is deprecated, it will be retired on 2025-08-25. Please use name "kubelogApiKey".');
+            }
+    
+            var home=(cluster.getOptionalString('kwirthHome') || cluster.getOptionalString('kubelogKwirthHome'))!;
+            var apiKey=(cluster.getOptionalString('kwirthApiKey') || cluster.getOptionalString('kubelogKwirthApiKey'))!;
+            var title=(cluster.has('title')?cluster.getString('title'):'No name');
+            var kdata:KubelogClusterData={
+                home,
+                apiKey,
+                title,
                 namespacePermissions: [],
                 viewPermissions: [],
                 restartPermissions: []
             };
             logger.info(`Kwirth for ${clName} is located at ${kdata.home}.`);
 
-            // we now read and format permissions according to destination structure inside KwirthClusterData
+            // we now read and format permissions according to destination structure inside KubelogClusterData
             loadNamespacePermission(logger, cluster, kdata);
-            kdata.viewPermissions=loadPodPermissions('kwirthPodViewPermissions',logger, cluster);
-            kdata.restartPermissions=loadPodPermissions('kwirthPodRestartPermissions', logger, cluster);
-            KubelogStaticData.clusterKwirthData.set(clName,kdata);
+            kdata.viewPermissions=loadPodPermissions('kubelogPodViewPermissions',logger, cluster);
+            kdata.restartPermissions=loadPodPermissions('kubelogPodRestartPermissions', logger, cluster);
+            KubelogStaticData.clusterKubelogData.set(clName,kdata);
         }
         else {
-            logger.warn(`Cluster ${clName} has no Kwirth onformation. Will not be used for Kubelog log viewing`);
+            logger.warn(`Cluster ${clName} has no Kwirth information (kubelogHome and kubelogApiKey are missing). It will not be used for Kubelog log viewing.`);
         }
       });
+    //   console.log(KubelogStaticData.clusterKubelogData);
+    //   console.log(KubelogStaticData.clusterKubelogData.get('k3d-remote'));
+    //   console.log(KubelogStaticData.clusterKubelogData.get('Azure-AKS'));
     });
 }
 
