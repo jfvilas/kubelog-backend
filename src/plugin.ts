@@ -20,16 +20,16 @@ export const kubelogPlugin = createBackendPlugin({
     pluginId: 'kubelog',
     register(env) {
         env.registerInit({
-        deps: {
-            discovery: coreServices.discovery,
-            config: coreServices.rootConfig,
-            logger: coreServices.logger,
-            auth: coreServices.auth,
-            httpAuth: coreServices.httpAuth,
-            httpRouter: coreServices.httpRouter,
-            userInfo: coreServices.userInfo
-        },
-        async init({ discovery, config, httpRouter, logger, auth, httpAuth, userInfo }) {
+            deps: {
+                discovery: coreServices.discovery,
+                config: coreServices.rootConfig,
+                logger: coreServices.logger,
+                auth: coreServices.auth,
+                httpAuth: coreServices.httpAuth,
+                httpRouter: coreServices.httpRouter,
+                userInfo: coreServices.userInfo
+            },
+            async init({ discovery, config, httpRouter, logger, auth, httpAuth, userInfo }) {
                 httpRouter.use(
                     await createRouter({
                         discoverySvc: discovery,

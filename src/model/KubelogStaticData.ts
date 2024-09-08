@@ -13,10 +13,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-class KubelogStaticData {
-    public static clusterKubelogData:Map<string,KubelogClusterData>= new Map();
-}
-
 type KubelogNamespacePermissions = {
     namespace:string;
     identityRefs:string[];
@@ -31,23 +27,42 @@ type KubelogNamespacePermissions = {
         title: 'Kubernetes local',
         namespacePermissions: [ { namespace: 'pre', identityRefs: [Array] } ],
         viewPermissions: [
-            { namespace: 'test', allow: [Map], restrict: [Map] },
-            { namespace: 'pre', allow: [Map], restrict: [Map] },
-            { namespace: 'staging', allow: [Map], restrict: [Map] },
-            { namespace: 'corporate', allow: [Map], restrict: [Map] },
-            { namespace: 'pro', allow: [Map], deny: [Map] }
+            { namespace: 'test', allow: [Map] },
+            { namespace: 'pre', restrict: [Map] },
+            { namespace: 'staging', allow: [Map], restrict: [Map]  },
+            { namespace: 'corporate', allow: [Map] },
+            { namespace: 'pro', allow: [Map], restrict: [Map] }
         ],
         restartPermissions: [
-            { namespace: 'dev', allow: [Map], restrict: [Map], deny: [Map] },
-            { namespace: 'pre', allow: [Map], deny: [Map] }
+            { namespace: 'dev', allow: [Map], restrict: [Map], restrict: [Map] },
+            { namespace: 'pre', allow: [Map], restrict: [Map] }
         ]
     }    
 */
+
+/**
+ * @field pods: an array of RegExp build from the expressions that indentify pods
+ * @field refs: an array of RegExp build from the expressions that indentify refs
+ */
+export type PodPermissionRule = {
+    pods: RegExp[]
+    refs: RegExp[]
+}
+
+/**
+ * @type KubelogNamespacedPodPermissions is the whole permissions that must be checked for a pod access in order to execute an action (view, restart...)
+ * @field namespace is the namespace where this permission set must be applied (permissions maybe different for different namespaces, obviously)
+ * @field allow: at least un rule in the allow must be fulfilled for the user to have access to the pod
+ * @field except: if, after processsing 'allow', a rule in the except set evaluates to false the access is not allowed
+ * @field deny: if a rule in the deny set evaluates to true then the access is denied
+ * @field unless: if, after processing 'deny', we found at least one 'unless' rule that evaluates to true, access is granted
+ */
 export type KubelogPodPermissions = {
     namespace:string;
-    allow?:Map<string,string[]|undefined>;
-    restrict?:Map<string,string[]|undefined>;
-    deny?:Map<string,string[]|undefined>;
+    allow?: PodPermissionRule[];
+    except?:PodPermissionRule[];
+    deny?:PodPermissionRule[];
+    unless?:PodPermissionRule[];
 }
 
 export type KubelogClusterData = {
@@ -57,6 +72,10 @@ export type KubelogClusterData = {
     namespacePermissions: KubelogNamespacePermissions[];
     viewPermissions: KubelogPodPermissions[];
     restartPermissions: KubelogPodPermissions[];
+}
+
+class KubelogStaticData {
+    public static clusterKubelogData:Map<string,KubelogClusterData>= new Map();
 }
 
 export { KubelogStaticData }

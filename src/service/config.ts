@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 import { LoggerService, RootConfigService } from '@backstage/backend-plugin-api';
-import { KubelogStaticData, KubelogClusterData, KubelogPodPermissions } from '../model/KubelogStaticData';
+import { KubelogStaticData, KubelogClusterData, KubelogPodPermissions, PodPermissionRule } from '../model/KubelogStaticData';
 import { Config } from '@backstage/config';
 
 /**
@@ -23,7 +23,7 @@ import { Config } from '@backstage/config';
  * @param cluster Cluster config as it is read form app-config
  * @param kdata KwirtClusterData being processed
  */
-const loadNamespacePermission = (logger:LoggerService, cluster:Config, kdata:KubelogClusterData) => {
+const loadNamespacePermissions = (logger:LoggerService, cluster:Config, kdata:KubelogClusterData) => {
     if (cluster.has('kwirthNamespacePermissions') || cluster.has('kubelogNamespacePermissions')) {
         if (cluster.has('kwirthNamespacePermissions')) {
             logger.warn('"kwirthNamespacePermissions" is deprecated, it will be retired on 2025-08-25. Please use name "kubelogNamespacePermissions".')
@@ -44,13 +44,25 @@ const loadNamespacePermission = (logger:LoggerService, cluster:Config, kdata:Kub
 }
 
 const loadPodRules = (config:Config, id:string) => {
-    var rules=new Map<string,string[]|undefined>();
+    var rules:PodPermissionRule[]=[];
     for (var rule of config.getConfigArray(id)) {
-        var pods=rule.getStringArray('pods');
-        var refs=rule.getOptionalStringArray('refs');
-        for (var podExpression of pods) {
-            rules.set(podExpression,refs);
+        var podsStringArray = rule.getOptionalStringArray('pods') || ['.*'];
+        var podsRegexArray:RegExp[]=[];
+        for (var expr of podsStringArray) {
+            podsRegexArray.push(new RegExp(expr));
         }
+
+        var refsStringArray = rule.getOptionalStringArray('refs') || ['.*'];
+        var refsRegexArray:RegExp[]=[];
+        for (var expr of refsStringArray) {
+            refsRegexArray.push(new RegExp(expr));
+        }
+
+        var prr:PodPermissionRule={
+            pods:podsRegexArray,
+            refs:refsRegexArray
+        }
+        rules.push(prr);
     }
     return rules;
 }
@@ -70,8 +82,9 @@ const loadPodPermissions = (configKey:string, logger:LoggerService, cluster:Conf
             var podPermissions:KubelogPodPermissions={ namespace:namespaceName };
 
             if (ns.getConfig(namespaceName).has('allow')) podPermissions.allow=loadPodRules(ns.getConfig(namespaceName), 'allow');
-            if (ns.getConfig(namespaceName).has('restrict')) podPermissions.restrict=loadPodRules(ns.getConfig(namespaceName), 'restrict');
+            if (ns.getConfig(namespaceName).has('except')) podPermissions.except=loadPodRules(ns.getConfig(namespaceName), 'except');
             if (ns.getConfig(namespaceName).has('deny')) podPermissions.deny=loadPodRules(ns.getConfig(namespaceName), 'deny');
+            if (ns.getConfig(namespaceName).has('unless')) podPermissions.unless=loadPodRules(ns.getConfig(namespaceName), 'unless');
             clusterPodPermissions.push(podPermissions);
         }
     }
@@ -119,7 +132,7 @@ const loadClusters = (logger:LoggerService, config:RootConfigService) => {
             logger.info(`Kwirth for ${clName} is located at ${kdata.home}.`);
 
             // we now read and format permissions according to destination structure inside KubelogClusterData
-            loadNamespacePermission(logger, cluster, kdata);
+            loadNamespacePermissions(logger, cluster, kdata);
             kdata.viewPermissions=loadPodPermissions('kubelogPodViewPermissions',logger, cluster);
             kdata.restartPermissions=loadPodPermissions('kubelogPodRestartPermissions', logger, cluster);
             KubelogStaticData.clusterKubelogData.set(clName,kdata);
@@ -128,9 +141,6 @@ const loadClusters = (logger:LoggerService, config:RootConfigService) => {
             logger.warn(`Cluster ${clName} has no Kwirth information (kubelogHome and kubelogApiKey are missing). It will not be used for Kubelog log viewing.`);
         }
       });
-    //   console.log(KubelogStaticData.clusterKubelogData);
-    //   console.log(KubelogStaticData.clusterKubelogData.get('k3d-remote'));
-    //   console.log(KubelogStaticData.clusterKubelogData.get('Azure-AKS'));
     });
 }
 
