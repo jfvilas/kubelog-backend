@@ -15,25 +15,24 @@ limitations under the License.
 */
 import express from 'express';
 import Router from 'express-promise-router';
-import { AuthService, BackstageUserInfo, CacheService, DiscoveryService, HttpAuthService, LoggerService, RootConfigService, UrlReaderService, UserInfoService } from '@backstage/backend-plugin-api';
+import { AuthService, BackstageUserInfo, DiscoveryService, HttpAuthService, LoggerService, RootConfigService, UserInfoService } from '@backstage/backend-plugin-api';
 import { CatalogClient } from '@backstage/catalog-client';
 import { UserEntity } from '@backstage/catalog-model';
 import { FetchApi } from '@backstage/core-plugin-api';
 
 // Kubelog
-import { Resources } from '@jfvilas/plugin-kubelog-common';
+import { ClusterPods } from '@jfvilas/plugin-kubelog-common';
 import { loadClusters } from './config';
 import { KubelogStaticData } from '../model/KubelogStaticData';
+import { checkPodPermission } from './permissions';
 
 export type KubelogRouterOptions = {
-  discovery: DiscoveryService;
-  config: RootConfigService;
-  reader: UrlReaderService;
-  cache: CacheService;
-  logger: LoggerService;
-  userInfo: UserInfoService;
-  auth: AuthService;
-  httpAuth: HttpAuthService;
+  discoverySvc: DiscoveryService;
+  configSvc: RootConfigService;
+  loggerSvc: LoggerService;
+  userInfoSvc: UserInfoService;
+  authSvc: AuthService;
+  httpAuthSvc: HttpAuthService;
 };
 
 /**
@@ -42,24 +41,24 @@ export type KubelogRouterOptions = {
  * @returns an express Router
  */
 async function createRouter(options: KubelogRouterOptions): Promise<express.Router> {
-    const { config, logger, userInfo, auth, httpAuth, discovery } = options;
+    const { configSvc, loggerSvc, userInfoSvc, authSvc, httpAuthSvc, discoverySvc } = options;
 
-    logger.info('Loading static config');
+    loggerSvc.info('Loading static config');
 
-    if (!config.has('kubernetes.clusterLocatorMethods')) {
-        logger.error(`Kueblog will not start, there is no 'clusterLocatorMethods' defined in app-config.`);
+    if (!configSvc.has('kubernetes.clusterLocatorMethods')) {
+        loggerSvc.error(`Kueblog will not start, there is no 'clusterLocatorMethods' defined in app-config.`);
         throw new Error('Kueblog backend will not be available.');
     }
-    loadClusters(logger, config);
-    logger.info('Static config loaded');
-    if (config.subscribe) {
-        config.subscribe( () => {
-            logger.warn('Change detected on app-config, Kubelog will update config.');
-            loadClusters(logger, config);
+    loadClusters(loggerSvc, configSvc);
+    loggerSvc.info('Static config loaded');
+    if (configSvc.subscribe) {
+        configSvc.subscribe( () => {
+            loggerSvc.warn('Change detected on app-config, Kubelog will update config.');
+            loadClusters(loggerSvc, configSvc);
         });
     }
     else {
-        logger.info('Kubelog cannot subscribe to config changes.');
+        loggerSvc.info('Kubelog cannot subscribe to config changes.');
     }
 
   const router = Router();
@@ -82,10 +81,10 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
   /**
    * Invokes Kwirth to obtain a list of pods that are tagged with the kubernetes-id of the entity we are looking for.
    * @param entityName name of the tagge dentity
-   * @returns a Resources[] (each Resources is list of pods in a cluster).
+   * @returns a ClusterPods[] (each ClusterPods is a cluster info with a list of pods).
    */
-  const getValidResources = async (entityName:string) => {
-    var resourceList:Resources[]=[];
+  const getValidClusters = async (entityName:string) => {
+    var clusterList:ClusterPods[]=[];
 
     for (const name of KubelogStaticData.clusterKubelogData.keys()) {
       var url=KubelogStaticData.clusterKubelogData.get(name)?.home as string;
@@ -94,10 +93,10 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
       var queryUrl=url+`/managecluster/find?label=backstage.io%2fkubernetes-id&entity=${entityName}`;
       var fetchResp = await fetch (queryUrl, {headers:{'Authorization':'Bearer '+apiKey}});
       var jsonResp=await fetchResp.json();
-      if (jsonResp) resourceList.push({ name, url, title, data:jsonResp });
+      if (jsonResp) clusterList.push({ name, url, title, data:jsonResp });
     }
 
-    return resourceList;
+    return clusterList;
   }
 
   /**
@@ -119,91 +118,123 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
   }
 
   /**
-   * Adds access keys to the list of kubernetes resources related with the entity
-   * @param resourcesList current list of resources (whcih have no access keys yet)
+   * Adds access keys to the list of kubernetes resources related with the entity. Only keys where the user is permitted are added.
+   * @param clusterList current list of clusters (whcih have no access keys yet)
    * @param entityName name of the entoty we want to stream logs
    * @param userEntityRef a user entoty ref for the current user ('user:group/id')
    * @param userGroups a list of the IAM groups the user belongs to
-   * @returns the resource l ist populated with access keys that the user is permitted to use
+   * @returns the cluster list populated with access keys that the user is permitted to use
    */
-  const addAccessKeys = async (resourcesList:Resources[], entityName:string, userEntityRef:string, userGroups:string[]) => {
+  const addAccessKeys = async (scope:string, clusterList:ClusterPods[], entityName:string, userEntityRef:string, userGroups:string[]) => {
     var principal=userEntityRef.split(':')[1];
     var username=principal.split('/')[1];
 
-    for (var cluster of resourcesList) {
-      var clusterKwirthRules=KubelogStaticData.clusterKubelogData.get(cluster.name)?.namespacePermissions;
+    for (var cluster of clusterList) {
+    
+        // first we check namespace permissions for the each cluster
+        var clusterKwirthRules=KubelogStaticData.clusterKubelogData.get(cluster.name)?.namespacePermissions;
 
-      for (var pod of cluster.data) {
-        var rule=clusterKwirthRules?.find(ns => ns.namespace===pod.namespace);
-        var allowed=false;
-        if (rule) {
-          if (rule.identityRefs.includes(userEntityRef.toLowerCase())) {
-            // a user ref has been found
-            allowed=true;
-          }
-          else {
-            var joinResult=rule?.identityRefs.filter(identityRef => userGroups.includes(identityRef));
-            if (joinResult && joinResult.length>0) {
-              // a group ref match has been found
-              allowed=true;
+        // for each pod we've found on the cluster we chack all namespace rules
+        for (var pod of cluster.data) {
+            var rule=clusterKwirthRules?.find(ns => ns.namespace===pod.namespace);
+            var allowed=false;
+            if (rule) {
+                if (rule.identityRefs.includes(userEntityRef.toLowerCase())) {
+                    // a user ref has been found
+                    allowed=true;
+                }
+                else {
+                    var joinResult=rule?.identityRefs.filter(identityRef => userGroups.includes(identityRef));
+                    if (joinResult && joinResult.length>0) {
+                    // a group ref match has been found
+                    allowed=true;
+                    }
+                }
             }
-          }
+            else {
+                // no restrictions for this namespace
+                allowed=true;
+            }
+
+            if (allowed) {
+                // var kwirthResource=`filter:${pod.namespace}::${pod.name}:`;
+                // pod.accessKey=await getAccessKey(cluster.name, entityName, kwirthResource, username);          
+                // if the user fulfills any namespace permission, we now check pod permissions
+                var allowPodAccess=checkPodPermission(scope, cluster, pod);
+                if (allowPodAccess) {
+                    //var kwirthResource=`filter:${pod.namespace}::${pod.name}:`;
+                    //var kwirthResource=`restart:${pod.namespace}::${pod.name}:`;
+                    //var kwirthResource=`view:${pod.namespace}::${pod.name}:`;
+                    //+++ implement more scopes in kwirth
+                    var kwirthResource=`${scope}:${pod.namespace}::${pod.name}:`;
+                    pod.accessKey=await getAccessKey(cluster.name, entityName, kwirthResource, username);          
+                }
+            }
         }
-        else {
-          // no restrictions for this namespace
-          allowed=true;
-        }
-        if (allowed) {
-          var kwirthResource=`filter:${pod.namespace}::${pod.name}:`;
-          pod.accessKey=await getAccessKey(cluster.name, entityName, kwirthResource, username);          
-        }
-      }
     }
-    return resourcesList;
+    return clusterList;
   }
 
-  /**
-   * builds a list of groups (expressed as identity refs) that the user belongs to.
-   * @param userInfo Backstage user info of the user to search groups for
-   * @returns an array of group refs in canonical form
-   */
-  const getUserGroups = async (userInfo:BackstageUserInfo) => {
-    const { token } = await auth.getPluginRequestToken({
-        onBehalfOf: await auth.getOwnServiceCredentials(),
-        targetPluginId: 'catalog'
+    /**
+     * builds a list of groups (expressed as identity refs) that the user belongs to.
+     * @param userInfo Backstage user info of the user to search groups for
+     * @returns an array of group refs in canonical form
+     */
+    const getUserGroups = async (userInfo:BackstageUserInfo) => {
+        const { token } = await authSvc.getPluginRequestToken({
+            onBehalfOf: await authSvc.getOwnServiceCredentials(),
+            targetPluginId: 'catalog'
+        });
+        const catalogClient = new CatalogClient({
+            discoveryApi: discoverySvc,
+            fetchApi: createAuthFetchApi(token),
+        });
+
+        const entity = await catalogClient.getEntityByRef(userInfo.userEntityRef) as UserEntity;
+        var userGroupsRefs:string[]=[];
+        if (entity?.spec.memberOf) userGroupsRefs=entity?.spec.memberOf;  
+        return userGroupsRefs;
+    }
+
+    const processView = async (req:any, res:any) => {
+        // obtain basic user info
+        const credentials = await httpAuthSvc.credentials(req, { allow: ['user'] });
+        const userInfo = await userInfoSvc.getUserInfo(credentials);
+    
+        // get user groups list
+        var userGroupsRefs=await getUserGroups(userInfo);
+    
+        // get a list of clusters that contain pods related to entity
+        //+++ control error here (maybe we cannot conntact the cluster, for example)
+        var clusterList:ClusterPods[]=await getValidClusters(req.body.metadata.name);
+    
+        // add access keys to authorized resources (according to group memberships and kubelog config in app-config)
+        clusterList=await addAccessKeys('view', clusterList, req.body.metadata.name, userInfo.userEntityRef, userGroupsRefs);
+    
+        res.status(200).send(clusterList);
+    }
+
+    const processRestart = async (req:any, res:any) => {
+        // obtain basic user info
+        const credentials = await httpAuthSvc.credentials(req, { allow: ['user'] });
+        const userInfo = await userInfoSvc.getUserInfo(credentials);
+
+        // get user groups list
+        var userGroupsRefs=await getUserGroups(userInfo);
+        console.log(userGroupsRefs);
+
+        res.status(401).send();
+    }
+
+    // this endpoints receives entity from the kubelog plugin and builds a list of resurces with api keys
+    router.post('/start', (req, res) => {
+        loggerSvc.warn('This endpoint is deprecated, update your "plugin-kubelog" package to 0.8.36 or later before 2025-08-25.');
+        processView(req,res);
     });
-    const catalogClient = new CatalogClient({
-        discoveryApi: discovery,
-        fetchApi: createAuthFetchApi(token),
-    });
+    router.post('/view', processView);
+    router.post('/restart', processRestart);
 
-    const entity = await catalogClient.getEntityByRef(userInfo.userEntityRef) as UserEntity;
-    var userGroupsRefs:string[]=[];
-    if (entity?.spec.memberOf) userGroupsRefs=entity?.spec.memberOf;  
-    return userGroupsRefs;
-  }
-
-
-  // this endpoints receives entity from the kubelog plugin and builds a list of resurces with api keys
-  router.post('/start', async (req, res) => {
-    // obtain basic user info
-    const credentials = await httpAuth.credentials(req, { allow: ['user'] });
-    const info = await userInfo.getUserInfo(credentials);
-
-    // get user groups list
-    var userGroupsRefs=await getUserGroups(info);
-
-    // get a resource list
-    //+++ control error here (maybe we cannot conntact the cluster, for example)
-    var resourcesList:Resources[]=await getValidResources(req.body.metadata.name);
-
-    // add access keys to authorized resources (according to group memberships and kubelog config in app-config)
-    resourcesList=await addAccessKeys(resourcesList, req.body.metadata.name, info.userEntityRef, userGroupsRefs);
-
-    res.status(200).send(resourcesList);
-  });
-
-  return router;
+    return router;
 }
 
 export { createRouter }

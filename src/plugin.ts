@@ -24,24 +24,20 @@ export const kubelogPlugin = createBackendPlugin({
             discovery: coreServices.discovery,
             config: coreServices.rootConfig,
             logger: coreServices.logger,
-            reader: coreServices.urlReader,
-            cache: coreServices.cache,
             auth: coreServices.auth,
             httpAuth: coreServices.httpAuth,
             httpRouter: coreServices.httpRouter,
             userInfo: coreServices.userInfo
         },
-        async init({ discovery, config, httpRouter, logger, reader, cache, auth, httpAuth, userInfo }) {
+        async init({ discovery, config, httpRouter, logger, auth, httpAuth, userInfo }) {
                 httpRouter.use(
                     await createRouter({
-                        discovery,
-                        config,
-                        logger,
-                        reader,
-                        cache,
-                        auth,
-                        httpAuth,
-                        userInfo
+                        discoverySvc: discovery,
+                        configSvc: config,
+                        loggerSvc: logger,
+                        authSvc: auth,
+                        httpAuthSvc: httpAuth,
+                        userInfoSvc: userInfo
                     })
                 )
             }
