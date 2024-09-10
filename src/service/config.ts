@@ -81,10 +81,19 @@ const loadPodPermissions = (configKey:string, logger:LoggerService, cluster:Conf
             var namespaceName=ns.keys()[0];
             var podPermissions:KubelogPodPermissions={ namespace:namespaceName };
 
-            if (ns.getConfig(namespaceName).has('allow')) podPermissions.allow=loadPodRules(ns.getConfig(namespaceName), 'allow');
-            if (ns.getConfig(namespaceName).has('except')) podPermissions.except=loadPodRules(ns.getConfig(namespaceName), 'except');
-            if (ns.getConfig(namespaceName).has('deny')) podPermissions.deny=loadPodRules(ns.getConfig(namespaceName), 'deny');
-            if (ns.getConfig(namespaceName).has('unless')) podPermissions.unless=loadPodRules(ns.getConfig(namespaceName), 'unless');
+            if (ns.getConfig(namespaceName).has('allow')) {
+                podPermissions.allow=loadPodRules(ns.getConfig(namespaceName), 'allow');
+                if (ns.getConfig(namespaceName).has('except')) podPermissions.except=loadPodRules(ns.getConfig(namespaceName), 'except');
+                if (ns.getConfig(namespaceName).has('deny')) podPermissions.deny=loadPodRules(ns.getConfig(namespaceName), 'deny');
+                if (ns.getConfig(namespaceName).has('unless')) podPermissions.unless=loadPodRules(ns.getConfig(namespaceName), 'unless');
+            }
+            else {
+                podPermissions.allow=[];
+                podPermissions.allow.push({
+                    pods: [new RegExp('.*')],
+                    refs: [new RegExp('.*')]
+                });
+            }
             clusterPodPermissions.push(podPermissions);
         }
     }
