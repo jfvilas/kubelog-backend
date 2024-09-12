@@ -169,25 +169,20 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
     const addAccessKeys = async (reqScopeStr:string, foundClusters:ClusterPods[], entityName:string, userEntityRef:string, userGroups:string[], keyName:string) => {
         var reqScope:KWIRTH_SCOPE= KWIRTH_SCOPE[reqScopeStr as keyof typeof KWIRTH_SCOPE]
         if (!reqScope) {
-            console.log(`Invalid scope requested: ${reqScopeStr}`)
+            loggerSvc.info(`Invalid scope requested: ${reqScopeStr}`)
             return;
         }
         var principal=userEntityRef.split(':')[1]
         var username=principal.split('/')[1]
 
         for (var foundCluster of foundClusters) {
-            console.log('TEST CLUSTER '+foundCluster.name)
 
             // for each pod we've found on the cluster we check all namespace permissions
             for (var podData of foundCluster.data) {
-                console.log(`TEST POD ${podData.namespace}/${podData.name}`)
-
-                console.log(`test nsaccess ${podData.namespace}`)
                 // first we check if user is allowed to acccess namespace
                 var allowedToNamespace=checkNamespaceAccess(foundCluster, podData, userEntityRef, userGroups)
 
                 if (allowedToNamespace) {
-                    console.log(`test podaccess ${podData.name}`)
 
                     // then we check if required pod namespace has pod access restriccions for requested namespace
                     var clusterDef = KubelogStaticData.clusterKubelogData.get(foundCluster.name)
@@ -198,13 +193,11 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
                     }
                     var namespaceRestricted = podPermissions.some(pp => pp.namespace===podData.namespace);
                     if (!namespaceRestricted) {
-                        console.log(`podaccess: no namespace restrictions for ns ${podData.namespace}`);
                         //var kwirthResource=`${KWIRTH_SCOPE[reqScope]}:${podData.podNamespace}::${podData.podName}:`;
                         //podData.accessKey=await getAccessKey(foundCluster.name, entityName, kwirthResource, username);
                         await setAccessKey(reqScope, foundCluster, podData, entityName, username, keyName);
                     }
                     else {
-                        console.log(`podaccess: namespace restricted, checking podaccess for ${podData.namespace}`)
                         // we now check pod permissions
                         var allowedToPod=checkPodAccess(loggerSvc, reqScope, foundCluster, podData, entityName, userEntityRef, userGroups)
                         if (allowedToPod) {
@@ -217,7 +210,6 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
                 }
                 else {
                     // user is not allowed to namespace, so don't need to check pod permissions, we finish
-                    console.log('nsaccess: user not allowed --> NOADDEDKEYS')
                     break;
                 }
             }
@@ -253,9 +245,6 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
     
         // get user groups list
         var userGroupsRefs=await getUserGroups(userInfo);
-        console.log('USER DATA');
-        console.log(userInfo.userEntityRef);
-        console.log(userGroupsRefs);
     
         // get a list of clusters that contain pods related to entity
         //+++ control errors here (maybe we cannot conntact the cluster, for example)
