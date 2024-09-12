@@ -53,7 +53,7 @@ Once you have a Kubernetes cluster with a Kwirth installation in place (to expor
 
 Once Kwirth is running perform there two simple actions:
 1. Login to your Kwirth and access to the [API Key section](https://jfvilas.github.io/kwirth/#/apimanagement?id=api-management) to create an API Key that we need for enabling Kubelog to access Kwirth.
-2. The API Key should be 'permanent', the scope has to be 'cluster' and set the expire term long enough. When the API Key has been created, copy the API Key that Kwrith will create for you and is displayed at the API Key list.
+2. The API Key should be 'permanent', the scope has to be 'cluster' and set the expire term long enough. When the API Key has been created, copy the API Key that Kwirth will create for you and is displayed at the API Key list.
 
 This is all you need to do inside Kwirth.
 

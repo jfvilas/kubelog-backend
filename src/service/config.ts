@@ -118,7 +118,7 @@ const loadClusters = (logger:LoggerService, config:RootConfigService) => {
 
       clusters.forEach(cluster => {
 
-        var clName=cluster.getString('name');
+        var name=cluster.getString('name');
         if ((cluster.has('kwirthHome') || cluster.has('kubelogKwirthHome')) && (cluster.has('kwirthApiKey') || cluster.has('kubelogKwirthApiKey'))) {
             if (cluster.has('kwirthHome')) {
                 logger.warn('"kwirthHome" is deprecated, it will be retired on 2025-08-25. Please use name "kubelogHome".');
@@ -131,23 +131,56 @@ const loadClusters = (logger:LoggerService, config:RootConfigService) => {
             var apiKey=(cluster.getOptionalString('kwirthApiKey') || cluster.getOptionalString('kubelogKwirthApiKey'))!;
             var title=(cluster.has('title')?cluster.getString('title'):'No name');
             var kdata:KubelogClusterData={
-                home,
-                apiKey,
+                name,
+                kwirthHome: home,
+                kwirthApiKey: apiKey,
+                kwirthData: undefined,
                 title,
                 namespacePermissions: [],
                 viewPermissions: [],
                 restartPermissions: []
-            };
-            logger.info(`Kwirth for ${clName} is located at ${kdata.home}.`);
+            }
+            logger.info(`Kwirth for ${name} is located at ${kdata.kwirthHome}.`);
+            try {
+                fetch (kdata.kwirthHome+'/config/version').then(response => {
+                    try {
+                        response.text().then(data => {
+                            try {
+                                var kwrithData=JSON.parse(data);
+                                logger.info(`Kwirth info at cluster '${kdata.name}': ${JSON.stringify(kwrithData)}`)
+                                kdata.kwirthData=kwrithData;
+                            }
+                            catch (err) {
+                                logger.error(`Kwirth at cluster ${kdata.name} returned errors: ${err}`)
+                                logger.info(data)
+                                kdata.kwirthData = {
+                                    version:'0.8.29',
+                                    clusterName:'unknown',
+                                    inCluster:false,
+                                    namespace:'unknown',
+                                    deployment:'unknown'
+                                }
+                            }
+                        })
+                    }
+                    catch (err) {
+                        logger.error(`Kwirth at cluster ${kdata.name} returned fetch errors: ${err}`)
+                    }
+                })
+            }
+            catch (err) {
+                logger.info(`Kwirth access error: ${err}.`)
+                logger.warn(`Kwirth home URL (${kdata.kwirthHome}) at cluster '${kdata.name}' cannot be accessed rigth now.`)
+            }
 
             // we now read and format permissions according to destination structure inside KubelogClusterData
             loadNamespacePermissions(logger, cluster, kdata);
             kdata.viewPermissions=loadPodPermissions('kubelogPodViewPermissions',logger, cluster);
             kdata.restartPermissions=loadPodPermissions('kubelogPodRestartPermissions', logger, cluster);
-            KubelogStaticData.clusterKubelogData.set(clName,kdata);
+            KubelogStaticData.clusterKubelogData.set(name,kdata);
         }
         else {
-            logger.warn(`Cluster ${clName} has no Kwirth information (kubelogHome and kubelogApiKey are missing). It will not be used for Kubelog log viewing.`);
+            logger.warn(`Cluster ${name} has no Kwirth information (kubelogHome and kubelogApiKey are missing). It will not be used for Kubelog log viewing.`);
         }
       });
     });

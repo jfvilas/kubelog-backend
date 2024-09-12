@@ -23,7 +23,7 @@ import { FetchApi } from '@backstage/core-plugin-api';
 // Kubelog
 import { ClusterPods, PodData } from '@jfvilas/plugin-kubelog-common';
 import { loadClusters } from './config';
-import { KubelogStaticData } from '../model/KubelogStaticData';
+import { KubelogStaticData, VERSION } from '../model/KubelogStaticData';
 import { checkNamespaceAccess, checkPodAccess, getPermissionSet, KWIRTH_SCOPE } from './permissions';
 
 export type KubelogRouterOptions = {
@@ -102,8 +102,8 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
     var clusterList:ClusterPods[]=[];
 
     for (const name of KubelogStaticData.clusterKubelogData.keys()) {
-        var url=KubelogStaticData.clusterKubelogData.get(name)?.home as string;
-        var apiKey=KubelogStaticData.clusterKubelogData.get(name)?.apiKey;
+        var url=KubelogStaticData.clusterKubelogData.get(name)?.kwirthHome as string;
+        var apiKey=KubelogStaticData.clusterKubelogData.get(name)?.kwirthApiKey;
         var title=KubelogStaticData.clusterKubelogData.get(name)?.title;
         var queryUrl=url+`/managecluster/find?label=backstage.io%2fkubernetes-id&entity=${entityName}`;
         try {
@@ -144,8 +144,8 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
 
     const setAccessKey = async (reqScope:KWIRTH_SCOPE, cluster:ClusterPods, reqPod:PodData, entityName:string, userName:string, keyName:string) => {
         var kwirthResource=`${KWIRTH_SCOPE[reqScope]}:${reqPod.namespace}::${reqPod.name}:`;
-        var url=KubelogStaticData.clusterKubelogData.get(cluster.name)?.home as string;
-        var apiKey=KubelogStaticData.clusterKubelogData.get(cluster.name)?.apiKey;
+        var url=KubelogStaticData.clusterKubelogData.get(cluster.name)?.kwirthHome as string;
+        var apiKey=KubelogStaticData.clusterKubelogData.get(cluster.name)?.kwirthApiKey;
 
         var payload={
             type:'volatile',
@@ -267,6 +267,10 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
         res.status(200).send(foundClusters);
     }
 
+    const processVersion = async (_req:any, res:any) => {
+        res.status(200).send({ version:VERSION });
+    }
+
     const processAccess = async (req:express.Request, res:express.Response) => {
         if (!req.query['scopes']) {
             res.status(400).send();
@@ -301,6 +305,10 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
 
     router.post(['/access'], (req, res) => {
         processAccess(req,res);
+    });
+
+    router.get(['/version'], (req, res) => {
+        processVersion(req,res);
     });
 
     return router;
