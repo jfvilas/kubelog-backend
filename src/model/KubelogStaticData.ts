@@ -68,18 +68,18 @@ export type KubelogPodPermissions = {
 }
 
 export type KubelogClusterData = {
-    name: string;
+    name: string
     kwirthData: any
-    kwirthHome: string;
-    kwirthApiKey: string;
-    title: string;
-    namespacePermissions: KubelogNamespacePermissions[];
-    viewPermissions: KubelogPodPermissions[];
-    restartPermissions: KubelogPodPermissions[];
+    kwirthHome: string
+    kwirthApiKey: string
+    title: string
+    namespacePermissions: KubelogNamespacePermissions[]
+    viewPermissions: KubelogPodPermissions[]
+    restartPermissions: KubelogPodPermissions[]
 }
 
 class KubelogStaticData {
-    public static clusterKubelogData:Map<string,KubelogClusterData>= new Map();
+    public static clusterKubelogData:Map<string,KubelogClusterData>= new Map()
 }
 
 

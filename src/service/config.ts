@@ -1,7 +1,7 @@
 /*
 Copyright 2024 Julio Fernandez
 
-Licensed under the Apache License, Version 2.0 (the "License");
+Licensed under the Apache License, Version 2.0 (the "License")
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
@@ -13,9 +13,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-import { LoggerService, RootConfigService } from '@backstage/backend-plugin-api';
-import { KubelogStaticData, KubelogClusterData, KubelogPodPermissions, PodPermissionRule } from '../model/KubelogStaticData';
-import { Config } from '@backstage/config';
+import { LoggerService, RootConfigService } from '@backstage/backend-plugin-api'
+import { KubelogStaticData, KubelogClusterData, KubelogPodPermissions, PodPermissionRule } from '../model/KubelogStaticData'
+import { Config } from '@backstage/config'
 
 /**
  * loads kubelogNamespacePermissions setting from app-config xml
@@ -28,43 +28,43 @@ const loadNamespacePermissions = (logger:LoggerService, cluster:Config, kdata:Ku
         if (cluster.has('kwirthNamespacePermissions')) {
             logger.warn('"kwirthNamespacePermissions" is deprecated, it will be retired on 2025-08-25. Please use name "kubelogNamespacePermissions".')
         }
-        logger.info(`Namespace permisson evaluation will be performed for cluster ${cluster.getString('name')}.`);
-        var permNamespaces= (cluster.getOptionalConfigArray('kwirthNamespacePermissions') || cluster.getOptionalConfigArray('kubelogNamespacePermissions'))!;
+        logger.info(`Namespace permisson evaluation will be performed for cluster ${cluster.getString('name')}.`)
+        var permNamespaces= (cluster.getOptionalConfigArray('kwirthNamespacePermissions') || cluster.getOptionalConfigArray('kubelogNamespacePermissions'))!
         for (var ns of permNamespaces) {
-            var namespace=ns.keys()[0];
-            var identityRefs=ns.getStringArray(namespace);
-            identityRefs=identityRefs.map(g => g.toLowerCase());
+            var namespace=ns.keys()[0]
+            var identityRefs=ns.getStringArray(namespace)
+            identityRefs=identityRefs.map(g => g.toLowerCase())
             kdata.namespacePermissions.push ({ namespace, identityRefs })
         }
     }
     else {
-        logger.info(`Cluster ${cluster.getString('name')} will have no namespace restrictions.`);
-        kdata.namespacePermissions=[];
+        logger.info(`Cluster ${cluster.getString('name')} will have no namespace restrictions.`)
+        kdata.namespacePermissions=[]
     }
 }
 
 const loadPodRules = (config:Config, id:string) => {
-    var rules:PodPermissionRule[]=[];
+    var rules:PodPermissionRule[]=[]
     for (var rule of config.getConfigArray(id)) {
-        var podsStringArray = rule.getOptionalStringArray('pods') || ['.*'];
-        var podsRegexArray:RegExp[]=[];
+        var podsStringArray = rule.getOptionalStringArray('pods') || ['.*']
+        var podsRegexArray:RegExp[]=[]
         for (var expr of podsStringArray) {
-            podsRegexArray.push(new RegExp(expr));
+            podsRegexArray.push(new RegExp(expr))
         }
 
-        var refsStringArray = rule.getOptionalStringArray('refs') || ['.*'];
-        var refsRegexArray:RegExp[]=[];
+        var refsStringArray = rule.getOptionalStringArray('refs') || ['.*']
+        var refsRegexArray:RegExp[]=[]
         for (var expr of refsStringArray) {
-            refsRegexArray.push(new RegExp(expr));
+            refsRegexArray.push(new RegExp(expr))
         }
 
         var prr:PodPermissionRule={
             pods:podsRegexArray,
             refs:refsRegexArray
         }
-        rules.push(prr);
+        rules.push(prr)
     }
-    return rules;
+    return rules
 }
 
 /**
@@ -74,33 +74,33 @@ const loadPodRules = (config:Config, id:string) => {
  * @param kdata KwirtClusterData being processed
  */
 const loadPodPermissions = (configKey:string, logger:LoggerService, cluster:Config) => {
-    var clusterPodPermissions:KubelogPodPermissions[]=[];
+    var clusterPodPermissions:KubelogPodPermissions[]=[]
     if (cluster.has(configKey)) {
-        var namespaceList=cluster.getConfigArray(configKey);
+        var namespaceList=cluster.getConfigArray(configKey)
         for (var ns of namespaceList) {
-            var namespaceName=ns.keys()[0];
-            var podPermissions:KubelogPodPermissions={ namespace:namespaceName };
+            var namespaceName=ns.keys()[0]
+            var podPermissions:KubelogPodPermissions={ namespace:namespaceName }
 
             if (ns.getConfig(namespaceName).has('allow')) {
-                podPermissions.allow=loadPodRules(ns.getConfig(namespaceName), 'allow');
-                if (ns.getConfig(namespaceName).has('except')) podPermissions.except=loadPodRules(ns.getConfig(namespaceName), 'except');
-                if (ns.getConfig(namespaceName).has('deny')) podPermissions.deny=loadPodRules(ns.getConfig(namespaceName), 'deny');
-                if (ns.getConfig(namespaceName).has('unless')) podPermissions.unless=loadPodRules(ns.getConfig(namespaceName), 'unless');
+                podPermissions.allow=loadPodRules(ns.getConfig(namespaceName), 'allow')
+                if (ns.getConfig(namespaceName).has('except')) podPermissions.except=loadPodRules(ns.getConfig(namespaceName), 'except')
+                if (ns.getConfig(namespaceName).has('deny')) podPermissions.deny=loadPodRules(ns.getConfig(namespaceName), 'deny')
+                if (ns.getConfig(namespaceName).has('unless')) podPermissions.unless=loadPodRules(ns.getConfig(namespaceName), 'unless')
             }
             else {
-                podPermissions.allow=[];
+                podPermissions.allow=[]
                 podPermissions.allow.push({
                     pods: [new RegExp('.*')],
                     refs: [new RegExp('.*')]
-                });
+                })
             }
-            clusterPodPermissions.push(podPermissions);
+            clusterPodPermissions.push(podPermissions)
         }
     }
     else {
-        logger.info(`No pod permissions for ${configKey} will be applied for ${cluster.getString('name')} (everyone will be allowed).`);
+        logger.info(`No pod permissions for ${configKey} will be applied for ${cluster.getString('name')} (everyone will be allowed).`)
     }
-    return clusterPodPermissions;
+    return clusterPodPermissions
 }
 
 /**
@@ -108,29 +108,28 @@ const loadPodPermissions = (configKey:string, logger:LoggerService, cluster:Conf
  * @param logger core service for logging
  * @param config core service for reading config info
  */
-const loadClusters = (logger:LoggerService, config:RootConfigService) => {
-    KubelogStaticData.clusterKubelogData.clear();
-    var locatingMethods=config.getConfigArray('kubernetes.clusterLocatorMethods');
+const loadClusters = async (logger:LoggerService, config:RootConfigService) => {
+    KubelogStaticData.clusterKubelogData.clear()
 
-    locatingMethods.forEach(method => {
+    var locatingMethods=config.getConfigArray('kubernetes.clusterLocatorMethods')
+    for (var method of locatingMethods) {
 
-      var clusters=(method.getConfigArray('clusters'));
+      var clusters=(method.getConfigArray('clusters'))
+      for (var cluster of clusters) {
 
-      clusters.forEach(cluster => {
-
-        var name=cluster.getString('name');
+        var name=cluster.getString('name')
         if ((cluster.has('kwirthHome') || cluster.has('kubelogKwirthHome')) && (cluster.has('kwirthApiKey') || cluster.has('kubelogKwirthApiKey'))) {
             if (cluster.has('kwirthHome')) {
-                logger.warn('"kwirthHome" is deprecated, it will be retired on 2025-08-25. Please use name "kubelogHome".');
+                logger.warn('"kwirthHome" is deprecated, it will be retired on 2025-08-25. Please use name "kubelogHome".')
             }
             if (cluster.has('kwirthApiKey')) {
-                logger.warn('"kwirthApiKey" is deprecated, it will be retired on 2025-08-25. Please use name "kubelogApiKey".');
+                logger.warn('"kwirthApiKey" is deprecated, it will be retired on 2025-08-25. Please use name "kubelogApiKey".')
             }
     
-            var home=(cluster.getOptionalString('kwirthHome') || cluster.getOptionalString('kubelogKwirthHome'))!;
-            var apiKey=(cluster.getOptionalString('kwirthApiKey') || cluster.getOptionalString('kubelogKwirthApiKey'))!;
-            var title=(cluster.has('title')?cluster.getString('title'):'No name');
-            var kdata:KubelogClusterData={
+            var home=(cluster.getOptionalString('kwirthHome') || cluster.getOptionalString('kubelogKwirthHome'))!
+            var apiKey=(cluster.getOptionalString('kwirthApiKey') || cluster.getOptionalString('kubelogKwirthApiKey'))!
+            var title=(cluster.has('title')?cluster.getString('title'):'No name')
+            var kcdata:KubelogClusterData={
                 name,
                 kwirthHome: home,
                 kwirthApiKey: apiKey,
@@ -140,50 +139,50 @@ const loadClusters = (logger:LoggerService, config:RootConfigService) => {
                 viewPermissions: [],
                 restartPermissions: []
             }
-            logger.info(`Kwirth for ${name} is located at ${kdata.kwirthHome}.`);
+
+            logger.info(`Kwirth for ${name} is located at ${kcdata.kwirthHome}.`)
             try {
-                fetch (kdata.kwirthHome+'/config/version').then(response => {
+                var response = await fetch (kcdata.kwirthHome+'/config/version');
+                try {
+                    var data = await response.text();
                     try {
-                        response.text().then(data => {
-                            try {
-                                var kwrithData=JSON.parse(data);
-                                logger.info(`Kwirth info at cluster '${kdata.name}': ${JSON.stringify(kwrithData)}`)
-                                kdata.kwirthData=kwrithData;
-                            }
-                            catch (err) {
-                                logger.error(`Kwirth at cluster ${kdata.name} returned errors: ${err}`)
-                                logger.info(data)
-                                kdata.kwirthData = {
-                                    version:'0.8.29',
-                                    clusterName:'unknown',
-                                    inCluster:false,
-                                    namespace:'unknown',
-                                    deployment:'unknown'
-                                }
-                            }
-                        })
+                        var kwrithData=JSON.parse(data)
+                        logger.info(`Kwirth info at cluster '${kcdata.name}': ${JSON.stringify(kwrithData)}`)
+                        kcdata.kwirthData=kwrithData
                     }
                     catch (err) {
-                        logger.error(`Kwirth at cluster ${kdata.name} returned fetch errors: ${err}`)
+                        logger.error(`Kwirth at cluster ${kcdata.name} returned errors: ${err}`)
+                        logger.info(data)
+                        kcdata.kwirthData = {
+                            version:'0.8.29',
+                            clusterName:'unknown',
+                            inCluster:false,
+                            namespace:'unknown',
+                            deployment:'unknown'
+                        }
                     }
-                })
+                }
+                catch (err) {
+                    logger.warn(`Error parsing version response from cluster '${kcdata.name}': ${err}`)
+                }
             }
             catch (err) {
                 logger.info(`Kwirth access error: ${err}.`)
-                logger.warn(`Kwirth home URL (${kdata.kwirthHome}) at cluster '${kdata.name}' cannot be accessed rigth now.`)
+                logger.warn(`Kwirth home URL (${kcdata.kwirthHome}) at cluster '${kcdata.name}' cannot be accessed rigth now.`)
             }
 
             // we now read and format permissions according to destination structure inside KubelogClusterData
-            loadNamespacePermissions(logger, cluster, kdata);
-            kdata.viewPermissions=loadPodPermissions('kubelogPodViewPermissions',logger, cluster);
-            kdata.restartPermissions=loadPodPermissions('kubelogPodRestartPermissions', logger, cluster);
-            KubelogStaticData.clusterKubelogData.set(name,kdata);
+            loadNamespacePermissions(logger, cluster, kcdata)
+            kcdata.viewPermissions=loadPodPermissions('kubelogPodViewPermissions',logger, cluster)
+            kcdata.restartPermissions=loadPodPermissions('kubelogPodRestartPermissions', logger, cluster)
+            KubelogStaticData.clusterKubelogData.set(name,kcdata)
         }
         else {
-            logger.warn(`Cluster ${name} has no Kwirth information (kubelogHome and kubelogApiKey are missing). It will not be used for Kubelog log viewing.`);
+            logger.warn(`Cluster ${name} has no Kwirth information (kubelogHome and kubelogApiKey are missing). It will not be used for Kubelog log viewing.`)
         }
-      });
-    });
+      }
+    }
+    console.log(KubelogStaticData.clusterKubelogData)
 }
 
 export { loadClusters }

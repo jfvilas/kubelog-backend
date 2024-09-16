@@ -1,6 +1,6 @@
 {
   "name": "@jfvilas/plugin-kubelog-backend",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "Backstage backend plugin for Kubelog",
   "keywords": [
     "Backstage",
@@ -53,6 +53,7 @@
     "@backstage/config": "^1.2.0",
     "@backstage/errors": "^1.2.4",
     "@backstage/integration": "^1.13.0",
+    "@jfvilas/kwirth-common": "0.2.8",
     "@types/express": "^4.17.6",
     "express": "^4.17.1",
     "express-promise-router": "^4.1.0",

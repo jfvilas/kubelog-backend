@@ -96,52 +96,47 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
     /**
      * Invokes Kwirth to obtain a list of pods that are tagged with the kubernetes-id of the entity we are looking for.
      * @param entityName name of the tagge dentity
-     * @returns a ClusterPods[] (each ClusterPods is a cluster info with a list of pods).
+     * @returns a ClusterPods[] (each ClusterPods is a cluster info with a list of pods tagged with the entityName).
      */
     const getValidClusters = async (entityName:string) => {
-    var clusterList:ClusterPods[]=[];
+        var clusterList:ClusterPods[]=[];
 
-    for (const name of KubelogStaticData.clusterKubelogData.keys()) {
-        var url=KubelogStaticData.clusterKubelogData.get(name)?.kwirthHome as string;
-        var apiKey=KubelogStaticData.clusterKubelogData.get(name)?.kwirthApiKey;
-        var title=KubelogStaticData.clusterKubelogData.get(name)?.title;
-        var queryUrl=url+`/managecluster/find?label=backstage.io%2fkubernetes-id&entity=${entityName}`;
-        try {
-            var fetchResp = await fetch (queryUrl, {headers:{'Authorization':'Bearer '+apiKey}});
-            var jsonResp=await fetchResp.json();
-            if (jsonResp) clusterList.push({ name, url, title, data:jsonResp });
-        }
-        catch (err) {
-            loggerSvc.warn(`Cannot access cluster ${name} (URL: ${queryUrl}): ${err}`);
-        }
-    }
+        for (const name of KubelogStaticData.clusterKubelogData.keys()) {
+            var url=KubelogStaticData.clusterKubelogData.get(name)?.kwirthHome as string;
+            var apiKey=KubelogStaticData.clusterKubelogData.get(name)?.kwirthApiKey;
+            var title=KubelogStaticData.clusterKubelogData.get(name)?.title;
+            var queryUrl=url+`/managecluster/find?label=backstage.io%2fkubernetes-id&entity=${entityName}`
+            try {
+                var fetchResp = await fetch (queryUrl, {headers:{'Authorization':'Bearer '+apiKey}})
+                if (fetchResp.status===200) {
+                    var jsonResp=await fetchResp.json()
+                    if (jsonResp) clusterList.push({ name, url, title, data:jsonResp })
+                }
+                else {
+                    loggerSvc.warn(`Invalid response from cluster ${name}: ${fetchResp.status}`)
+                    clusterList.push({ name, url, title, data:[] })
+                }
 
-    return clusterList;
+            }
+            catch (err) {
+                loggerSvc.warn(`Cannot access cluster ${name} (URL: ${queryUrl}): ${err}`)
+                clusterList.push({ name, url, title, data:[] })
+            }
+        }
+
+        return clusterList;
     }
 
     /**
      * This function obtains an accesskey for streaming a concrete log in a specific pod
-     * @param clusterName the name of the cluster
+     * @param reqScope the scope (view, restart...) that the user is requesting
+     * @param cluster the cluster where the pod has been found
+     * @param reqPod the pod that the user is requesting access to
      * @param entityName the name of the Backstage entity we are streaming for
-     * @param kwirthResource the Resource ID that identifies the log we want to stream
-     * @param userName the name of the Backstage user (for logging purposes inside Kwirth)
-     * @returns a Kwirth accessKey
+     * @param userName the id of the user (not a canonical identityRef, just the user id)
+     * @param keyName the name of the key inside the json where the accessKey must be set (typically, 'view', 'restart', etc...)
+     * @returns nothing (this function just set an accessKey in a property of the reqPod)
      */
-    // const getAccessKey = async (clusterName:string, entityName:string, kwirthResource:string, userName:string) => {
-    //     var url=KubelogStaticData.clusterKubelogData.get(clusterName)?.home as string;
-    //     var apiKey=KubelogStaticData.clusterKubelogData.get(clusterName)?.apiKey;
-
-    //     var payload={
-    //         type:'volatile',
-    //         resource: kwirthResource,
-    //         description:`Backstage API key for user ${userName} accessing component ${entityName}`,
-    //         expire:Date.now()+60*60*1000
-    //     }
-    //     var response=await fetch(url+'/key',{method:'POST', body:JSON.stringify(payload), headers:{'Content-Type':'application/json', Authorization:'Bearer '+apiKey}});
-    //     var data=await response.json();
-    //     return data.accessKey;
-    // }
-
     const setAccessKey = async (reqScope:KWIRTH_SCOPE, cluster:ClusterPods, reqPod:PodData, entityName:string, userName:string, keyName:string) => {
         var kwirthResource=`${KWIRTH_SCOPE[reqScope]}:${reqPod.namespace}::${reqPod.name}:`;
         var url=KubelogStaticData.clusterKubelogData.get(cluster.name)?.kwirthHome as string;
@@ -153,18 +148,25 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
             description:`Backstage API key for user ${userName} accessing component ${entityName}`,
             expire:Date.now()+60*60*1000
         }
-        var response=await fetch(url+'/key',{method:'POST', body:JSON.stringify(payload), headers:{'Content-Type':'application/json', Authorization:'Bearer '+apiKey}});
-        var data=await response.json();
-        (reqPod as any)[keyName]=data.accessKey;
+        var fetchResp=await fetch(url+'/key',{method:'POST', body:JSON.stringify(payload), headers:{'Content-Type':'application/json', Authorization:'Bearer '+apiKey}});
+        if (fetchResp.status===200) {
+            var data=await fetchResp.json();
+            (reqPod as any)[keyName]=data.accessKey;
+        }
+        else {
+            loggerSvc.warn(`Invalid response obtaining key from cluster ${cluster.name}: ${fetchResp.status}`)
+        }
     }
 
     /**
      * Adds access keys to the list of kubernetes resources related with the entity. Only keys where the user is permitted are added.
-     * @param foundClusters current list of clusters (whcih have no access keys yet)
-     * @param entityName name of the entoty we want to stream logs
+     * @param reqScopeStr is the string with the scope requestied ('view', 'restart'...)
+     * @param foundClusters current list of clusters (which have no access keys yet)
+     * @param entityName name of the entity we want to stream logs
      * @param userEntityRef a user entoty ref for the current user ('user:group/id')
      * @param userGroups a list of the IAM groups the user belongs to
-     * @returns the cluster list populated with access keys that the user is permitted to use
+     * @param keyName the name of the key inside the json where the accessKey must be set (typically, 'view', 'restart', etc...)
+     * @returns nothing (this function populate the foundClusters list with access keys that the user is allowed to use)
      */
     const addAccessKeys = async (reqScopeStr:string, foundClusters:ClusterPods[], entityName:string, userEntityRef:string, userGroups:string[], keyName:string) => {
         var reqScope:KWIRTH_SCOPE= KWIRTH_SCOPE[reqScopeStr as keyof typeof KWIRTH_SCOPE]
@@ -193,8 +195,6 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
                     }
                     var namespaceRestricted = podPermissions.some(pp => pp.namespace===podData.namespace);
                     if (!namespaceRestricted) {
-                        //var kwirthResource=`${KWIRTH_SCOPE[reqScope]}:${podData.podNamespace}::${podData.podName}:`;
-                        //podData.accessKey=await getAccessKey(foundCluster.name, entityName, kwirthResource, username);
                         await setAccessKey(reqScope, foundCluster, podData, entityName, username, keyName);
                     }
                     else {
@@ -202,8 +202,6 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
                         var allowedToPod=checkPodAccess(loggerSvc, reqScope, foundCluster, podData, entityName, userEntityRef, userGroups)
                         if (allowedToPod) {
                             // now we ask for an accessKey for the specific scope (typically 'view' or 'restart')
-                            // var kwirthResource=`${KWIRTH_SCOPE[reqScope]}:${podData.podNamespace}::${podData.podName}:`;
-                            // podData.accessKey=await getAccessKey(foundCluster.name, entityName, kwirthResource, username);
                             await setAccessKey(reqScope, foundCluster, podData, entityName, username, keyName);
                         }
                     }
@@ -238,6 +236,7 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
         return userGroupsRefs;
     }
 
+    // this is and API endpoint controller
     const processStart = async (req:any, res:any) => {
         // obtain basic user info
         const credentials = await httpAuthSvc.credentials(req, { allow: ['user'] });
@@ -247,7 +246,7 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
         var userGroupsRefs=await getUserGroups(userInfo);
     
         // get a list of clusters that contain pods related to entity
-        //+++ control errors here (maybe we cannot conntact the cluster, for example)
+        //+++ control errors here (maybe we cannot contact the cluster, for example)
         var foundClusters:ClusterPods[]=await getValidClusters(req.body.metadata.name);
     
         // add access keys to authorized resources (according to group memberships and kubelog config in app-config (namespace and pod permissions))
@@ -256,10 +255,12 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
         res.status(200).send(foundClusters);
     }
 
+    // this is and API endpoint controller
     const processVersion = async (_req:any, res:any) => {
         res.status(200).send({ version:VERSION });
     }
 
+    // this is and API endpoint controller
     const processAccess = async (req:express.Request, res:express.Response) => {
         if (!req.query['scopes']) {
             res.status(400).send();
@@ -288,7 +289,7 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
     // this endpoints receives entity from the kubelog plugin and builds a list of resurces with api keys
     router.post(['/start'], (req, res) => {
         //+++ warn only once
-        loggerSvc.warn('Endpoint "/start" is deprecated, update your "plugin-kubelog" package to 0.9.0 or later before 2025-08-25.');
+        loggerSvc.warn('Endpoint "/start" is deprecated. Please update your front-end "plugin-kubelog" package to 0.9.2 or later before 2025-08-25.');
         processStart(req,res);
     });
 
