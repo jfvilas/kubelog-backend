@@ -1,12 +1,14 @@
 # Backstage Kubelog plugin backend
 This Backstage plugin is the backend for the Kubelog (Kubernetes log viewing) frontend plugin.
 
-***NOTE*: Please refer to [Kubelog Plugin](https://github.com/jfvilas/kubelog) general info to understand what is Kubelog, what are its requirements and how does it work.**
+**NOTE: Version 0.9.5 implements pod restart, and requires Kwirth 0.2**
+
+**Please refer to [Kubelog Plugin](https://github.com/jfvilas/kubelog) general info to understand what is Kubelog, what are its requirements and how does it work.**
 
 This [Backstage]((https://backstage.io)) backend plugin is primarily responsible for the following tasks:
 
 - Reading Kueblog config from app-config
-- Validating login processes to remote Kwirth instances, and thus obtaining valid API keys for user.
+- Validating login processes to remote Kwirth instances, and thus obtaining valid API keys for users to view logs or restart pods.
 
 ## Install
 
@@ -170,9 +172,9 @@ Let's consider a simple view-scoped pod permission sample based on previously de
           title: 'Kubernetes local'
           kubelogKwirthHome: http://your-external.dns.name/kwirth
           kubelogKwirthApiKey: '40f5ea6c-bac3-df2f-d184-c9f3ab106ba9|permanent|cluster::::'
-+         kubelogNamespacePermissions:
-+           - stage: ['group:default/devops', 'group:default/admin']
-+           - production: ['group:default/admin', 'user:default/nicklaus-wirth']
+         kubelogNamespacePermissions:
+           - stage: ['group:default/devops', 'group:default/admin']
+           - production: ['group:default/admin', 'user:default/nicklaus-wirth']
           authProvider: 'serviceAccount'
           skipTLSVerify: true
           skipMetricsLookup: true
@@ -198,7 +200,7 @@ Let's consider a simple view-scoped pod permission sample based on previously de
           ...
 ```
 
-***VERY IMPORTANT NOTE:*** **All strings defined in the pod permission layer are regular expressions**
+***VERY IMPORTANT NOTE:*** **All strings defined in the pod permission layer are regular expressions.**
 
 About this example and about 'how to configure kubelog pod permissions':
 
@@ -236,7 +238,7 @@ Please be aware that not declaring 'pods' or 'refs' means using a **match-all** 
 
 
 #### Pod permission scopes
-Starting with **Kubelog 0.9**, there exist two scopes (that are consistent with Kwirth scopes):
+Starting with **Kubelog 0.9.5**, there exist two scopes (that are consistent with Kwirth scopes):
 
   - 'view' scope, for viewing logs
   - 'restart' scope, for restarting pods
@@ -270,9 +272,8 @@ Where:
   - NAMESPACE is the name (not a regex, I mean exactly the name) of a namespace.
   - 'allow', 'except', 'deny' and 'unless' contain arrays of objects, where each one object has only two properties: 'pods' and 'refs'.
     - 'pods' is an array of regex that will be evaluated against pod names.
-    - 'refs' is an array of regex that will be evaluated against Backstage identity references, where the format is the following one:
-      - General syntax is '**type:namespace/id**',
+    - 'refs' is an array of regex that will be evaluated against Backstage identity references, where the format is '**type:namespace/id**', where:
       - 'type' is one of 'user' or 'group',
-      - 'namespace' is a Backstage namespace.
+      - 'namespace' is a Backstage namespace (not Kubernetes namespace).
       - 'id' is a reference id, like a user name or a group name.
   - You can repeat NAMESPACE, in order to have different sections make your config readable if you have lots of rules.

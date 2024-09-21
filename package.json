@@ -1,6 +1,6 @@
 {
   "name": "@jfvilas/plugin-kubelog-backend",
-  "version": "0.9.3",
+  "version": "0.9.5",
   "description": "Backstage backend plugin for Kubelog",
   "keywords": [
     "Backstage",
@@ -47,7 +47,7 @@
   },
   "dependencies": {
     "@backstage/backend-common": "^0.23.3",
-    "@backstage/backend-plugin-api": "^0.7.0",
+    "@backstage/backend-plugin-api": "^0.8.1",
     "@backstage/catalog-client": "^1.6.5",
     "@backstage/catalog-model": "^1.5.0",
     "@backstage/config": "^1.2.0",

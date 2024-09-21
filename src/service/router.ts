@@ -21,7 +21,7 @@ import { UserEntity } from '@backstage/catalog-model';
 import { FetchApi } from '@backstage/core-plugin-api';
 
 // Kubelog
-import { ClusterPods, PodData } from '@jfvilas/plugin-kubelog-common';
+import { ClusterValidPods, PodData } from '@jfvilas/plugin-kubelog-common';
 import { loadClusters } from './config';
 import { KubelogStaticData, VERSION } from '../model/KubelogStaticData';
 import { checkNamespaceAccess, checkPodAccess, getPermissionSet, KWIRTH_SCOPE } from './permissions';
@@ -96,18 +96,18 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
     /**
      * Invokes Kwirth to obtain a list of pods that are tagged with the kubernetes-id of the entity we are looking for.
      * @param entityName name of the tagge dentity
-     * @returns a ClusterPods[] (each ClusterPods is a cluster info with a list of pods tagged with the entityName).
+     * @returns a ClusterValidPods[] (each ClusterValidPods is a cluster info with a list of pods tagged with the entityName).
      */
     const getValidClusters = async (entityName:string) => {
-        var clusterList:ClusterPods[]=[];
+        var clusterList:ClusterValidPods[]=[];
 
         for (const name of KubelogStaticData.clusterKubelogData.keys()) {
             var url=KubelogStaticData.clusterKubelogData.get(name)?.kwirthHome as string;
-            var apiKey=KubelogStaticData.clusterKubelogData.get(name)?.kwirthApiKey;
+            var apiKeyStr=KubelogStaticData.clusterKubelogData.get(name)?.kwirthApiKeyStr;
             var title=KubelogStaticData.clusterKubelogData.get(name)?.title;
             var queryUrl=url+`/managecluster/find?label=backstage.io%2fkubernetes-id&entity=${entityName}`
             try {
-                var fetchResp = await fetch (queryUrl, {headers:{'Authorization':'Bearer '+apiKey}})
+                var fetchResp = await fetch (queryUrl, {headers:{'Authorization':'Bearer '+apiKeyStr}})
                 if (fetchResp.status===200) {
                     var jsonResp=await fetchResp.json()
                     if (jsonResp) clusterList.push({ name, url, title, data:jsonResp })
@@ -137,10 +137,10 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
      * @param keyName the name of the key inside the json where the accessKey must be set (typically, 'view', 'restart', etc...)
      * @returns nothing (this function just set an accessKey in a property of the reqPod)
      */
-    const setAccessKey = async (reqScope:KWIRTH_SCOPE, cluster:ClusterPods, reqPod:PodData, entityName:string, userName:string, keyName:string) => {
+    const setAccessKey = async (reqScope:KWIRTH_SCOPE, cluster:ClusterValidPods, reqPod:PodData, entityName:string, userName:string, keyName:string) => {
         var kwirthResource=`${KWIRTH_SCOPE[reqScope]}:${reqPod.namespace}::${reqPod.name}:`;
         var url=KubelogStaticData.clusterKubelogData.get(cluster.name)?.kwirthHome as string;
-        var apiKey=KubelogStaticData.clusterKubelogData.get(cluster.name)?.kwirthApiKey;
+        var apiKeyStr=KubelogStaticData.clusterKubelogData.get(cluster.name)?.kwirthApiKeyStr;
 
         var payload={
             type:'volatile',
@@ -148,7 +148,7 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
             description:`Backstage API key for user ${userName} accessing component ${entityName}`,
             expire:Date.now()+60*60*1000
         }
-        var fetchResp=await fetch(url+'/key',{method:'POST', body:JSON.stringify(payload), headers:{'Content-Type':'application/json', Authorization:'Bearer '+apiKey}});
+        var fetchResp=await fetch(url+'/key',{method:'POST', body:JSON.stringify(payload), headers:{'Content-Type':'application/json', Authorization:'Bearer '+apiKeyStr}});
         if (fetchResp.status===200) {
             var data=await fetchResp.json();
             (reqPod as any)[keyName]=data.accessKey;
@@ -168,7 +168,7 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
      * @param keyName the name of the key inside the json where the accessKey must be set (typically, 'view', 'restart', etc...)
      * @returns nothing (this function populate the foundClusters list with access keys that the user is allowed to use)
      */
-    const addAccessKeys = async (reqScopeStr:string, foundClusters:ClusterPods[], entityName:string, userEntityRef:string, userGroups:string[], keyName:string) => {
+    const addAccessKeys = async (reqScopeStr:string, foundClusters:ClusterValidPods[], entityName:string, userEntityRef:string, userGroups:string[], keyName:string) => {
         var reqScope:KWIRTH_SCOPE= KWIRTH_SCOPE[reqScopeStr as keyof typeof KWIRTH_SCOPE]
         if (!reqScope) {
             loggerSvc.info(`Invalid scope requested: ${reqScopeStr}`)
@@ -247,7 +247,7 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
     
         // get a list of clusters that contain pods related to entity
         //+++ control errors here (maybe we cannot contact the cluster, for example)
-        var foundClusters:ClusterPods[]=await getValidClusters(req.body.metadata.name);
+        var foundClusters:ClusterValidPods[]=await getValidClusters(req.body.metadata.name);
     
         // add access keys to authorized resources (according to group memberships and kubelog config in app-config (namespace and pod permissions))
         await addAccessKeys('view', foundClusters, req.body.metadata.name, userInfo.userEntityRef, userGroupsRefs, 'accessKey');
@@ -276,7 +276,7 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
     
         // get a list of clusters that contain pods related to entity
         //+++ control errors here (maybe we cannot conntact the cluster, for example)
-        var foundClusters:ClusterPods[]=await getValidClusters(req.body.metadata.name);
+        var foundClusters:ClusterValidPods[]=await getValidClusters(req.body.metadata.name);
     
         // add access keys to authorized resources (according to group membership and kubelog config in app-config (namespace and pod permissions))
         for (var reqScopeStr of reqScopes) {

@@ -1,3 +1,5 @@
+import { KwirthData } from "@jfvilas/kwirth-common";
+
 /*
 Copyright 2024 Julio Fernandez
 
@@ -69,9 +71,9 @@ export type KubelogPodPermissions = {
 
 export type KubelogClusterData = {
     name: string
-    kwirthData: any
+    kwirthData: KwirthData
     kwirthHome: string
-    kwirthApiKey: string
+    kwirthApiKeyStr: string
     title: string
     namespacePermissions: KubelogNamespacePermissions[]
     viewPermissions: KubelogPodPermissions[]

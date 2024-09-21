@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 import { LoggerService } from "@backstage/backend-plugin-api";
-import { ClusterPods, PodData } from "@jfvilas/plugin-kubelog-common";
+import { ClusterValidPods, PodData } from "@jfvilas/plugin-kubelog-common";
 import { KubelogClusterData, KubelogStaticData, PodPermissionRule } from "../model/KubelogStaticData";
 
 export enum KWIRTH_SCOPE {
@@ -25,7 +25,7 @@ export enum KWIRTH_SCOPE {
     cluster
 }
 
-const checkNamespaceAccess = (cluster:ClusterPods, pod:PodData, userEntityRef:string, userGroups:string[]):boolean => {
+const checkNamespaceAccess = (cluster:ClusterValidPods, pod:PodData, userEntityRef:string, userGroups:string[]):boolean => {
     var namespacePermissions=KubelogStaticData.clusterKubelogData.get(cluster.name)?.namespacePermissions;
     var allowedToNamespace=false;
 
@@ -50,7 +50,8 @@ const checkNamespaceAccess = (cluster:ClusterPods, pod:PodData, userEntityRef:st
     return allowedToNamespace;
 }
 
-const checkPodPermissionRule = (ppr:PodPermissionRule, reqPod:PodData, entityName:string, userEntityRef:string, userGroups:string[]):boolean => {
+//const checkPodPermissionRule = (ppr:PodPermissionRule, reqPod:PodData, entityName:string, userEntityRef:string, userGroups:string[]):boolean => {
+const checkPodPermissionRule = (ppr:PodPermissionRule, entityName:string, userEntityRef:string, userGroups:string[]):boolean => {
     var refMatch:boolean=false;
 
     for (var podNameRegex of ppr.pods) {
@@ -94,7 +95,7 @@ const getPermissionSet = (reqScope:KWIRTH_SCOPE, cluster:KubelogClusterData) => 
  * @param reqPod data about the pod the user wants to access
  * @returns booelan indicating if the user can access the pod for doing what scaope says (view or restart)
  */
-const checkPodAccess = (loggerSvc:LoggerService, reqScope:KWIRTH_SCOPE, reqCluster:ClusterPods, reqPod:PodData, entityName:string, userEntityRef:string, userGroups:string[]):boolean => {
+const checkPodAccess = (loggerSvc:LoggerService, reqScope:KWIRTH_SCOPE, reqCluster:ClusterValidPods, reqPod:PodData, entityName:string, userEntityRef:string, userGroups:string[]):boolean => {
     loggerSvc.info(`Checking reqScope '${KWIRTH_SCOPE[reqScope]}' scope in cluster ${reqCluster.name} for pod: ${reqPod.namespace+'/'+reqPod.name}`);
     var cluster = KubelogStaticData.clusterKubelogData.get(reqCluster.name);
 
@@ -118,13 +119,15 @@ const checkPodAccess = (loggerSvc:LoggerService, reqScope:KWIRTH_SCOPE, reqClust
             var exceptMatches=false;
             // we test all allow rules, we stop if one matches
             for (var prr of podPermission.allow) {
-                allowMatches = checkPodPermissionRule(prr, reqPod, entityName, userEntityRef, userGroups);
+                //allowMatches = checkPodPermissionRule(prr, reqPod, entityName, userEntityRef, userGroups);
+                allowMatches = checkPodPermissionRule(prr, entityName, userEntityRef, userGroups);
             }
             if (allowMatches) {
                 if (podPermission.except) {
                     // we test all except rules, will stop if found one that matches, no need to continue
                     for (var prr of podPermission.except) {
-                        exceptMatches = checkPodPermissionRule(prr, reqPod, entityName, userEntityRef, userGroups);
+                        //exceptMatches = checkPodPermissionRule(prr, reqPod, entityName, userEntityRef, userGroups);
+                        exceptMatches = checkPodPermissionRule(prr, entityName, userEntityRef, userGroups);
                         // if there is a exception the process finishes now for this podPermission)
                         if (exceptMatches) {
                             break;
@@ -141,14 +144,16 @@ const checkPodAccess = (loggerSvc:LoggerService, reqScope:KWIRTH_SCOPE, reqClust
                     var denyMatches=false
                     var unlessMatches=false
                     for (var prr of podPermission.deny) {
-                        denyMatches = checkPodPermissionRule(prr, reqPod, entityName, userEntityRef, userGroups)
+                        //denyMatches = checkPodPermissionRule(prr, reqPod, entityName, userEntityRef, userGroups)
+                        denyMatches = checkPodPermissionRule(prr, entityName, userEntityRef, userGroups)
                         if (denyMatches) {
                             break;
                         }
                     }
                     if (denyMatches && podPermission.unless) {
                         for (var prr of podPermission.unless) {
-                            unlessMatches = checkPodPermissionRule(prr, reqPod, entityName, userEntityRef, userGroups)
+                            //unlessMatches = checkPodPermissionRule(prr, reqPod, entityName, userEntityRef, userGroups)
+                            unlessMatches = checkPodPermissionRule(prr, entityName, userEntityRef, userGroups)
                             if (unlessMatches) {
                                 break;
                             }

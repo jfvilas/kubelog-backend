@@ -127,13 +127,19 @@ const loadClusters = async (logger:LoggerService, config:RootConfigService) => {
             }
     
             var home=(cluster.getOptionalString('kwirthHome') || cluster.getOptionalString('kubelogKwirthHome'))!
-            var apiKey=(cluster.getOptionalString('kwirthApiKey') || cluster.getOptionalString('kubelogKwirthApiKey'))!
+            var apiKeyStr=(cluster.getOptionalString('kwirthApiKey') || cluster.getOptionalString('kubelogKwirthApiKey'))!
             var title=(cluster.has('title')?cluster.getString('title'):'No name')
             var kcdata:KubelogClusterData={
                 name,
                 kwirthHome: home,
-                kwirthApiKey: apiKey,
-                kwirthData: undefined,
+                kwirthApiKeyStr: apiKeyStr,
+                kwirthData: {
+                    version: '',
+                    clusterName: '',
+                    inCluster: false,
+                    namespace: '',
+                    deployment: ''
+                },
                 title,
                 namespacePermissions: [],
                 viewPermissions: [],
