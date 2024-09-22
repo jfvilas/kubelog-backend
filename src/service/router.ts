@@ -24,7 +24,7 @@ import { FetchApi } from '@backstage/core-plugin-api';
 import { ClusterValidPods, PodData } from '@jfvilas/plugin-kubelog-common';
 import { loadClusters } from './config';
 import { KubelogStaticData, VERSION } from '../model/KubelogStaticData';
-import { checkNamespaceAccess, checkPodAccess, getPermissionSet, KWIRTH_SCOPE } from './permissions';
+import { checkNamespaceAccess, checkPodAccess, getPodPermissionSet, KWIRTH_SCOPE } from './permissions';
 
 export type KubelogRouterOptions = {
   discoverySvc: DiscoveryService;
@@ -34,6 +34,11 @@ export type KubelogRouterOptions = {
   authSvc: AuthService;
   httpAuthSvc: HttpAuthService;
 };
+
+const DEBUG=undefined
+const debug = (a:any)  => {
+    if (DEBUG) console.log(a);
+}
 
 /**
  * 
@@ -178,28 +183,35 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
         var username=principal.split('/')[1]
 
         for (var foundCluster of foundClusters) {
-
+            debug('')
+            debug('')
+            debug('')
+            debug('cluster '+foundCluster.name)
+            debug('podDataLength '+foundCluster.data.length)
             // for each pod we've found on the cluster we check all namespace permissions
             for (var podData of foundCluster.data) {
                 // first we check if user is allowed to acccess namespace
+                debug('>>> CNA ')
                 var allowedToNamespace=checkNamespaceAccess(foundCluster, podData, userEntityRef, userGroups)
+                debug('<<< CNA '+allowedToNamespace)
 
                 if (allowedToNamespace) {
 
                     // then we check if required pod namespace has pod access restriccions for requested namespace
                     var clusterDef = KubelogStaticData.clusterKubelogData.get(foundCluster.name)
-                    var podPermissions=getPermissionSet(reqScope, clusterDef!)
-                    if (!podPermissions) {
-                        loggerSvc.warn(`Invalid scope requested: ${reqScope}`)
+                    var podPermissionSet=getPodPermissionSet(reqScope, clusterDef!)
+                    if (!podPermissionSet) {
+                        loggerSvc.warn(`Pod permission set not found: ${reqScope}`)
                         return
                     }
-                    var namespaceRestricted = podPermissions.some(pp => pp.namespace===podData.namespace);
+                    var namespaceRestricted = podPermissionSet.some(pp => pp.namespace===podData.namespace);
                     if (!namespaceRestricted) {
+                        // there are no namespace restrictions specified in the pod permission set
                         await setAccessKey(reqScope, foundCluster, podData, entityName, username, keyName);
                     }
                     else {
-                        // we now check pod permissions
-                        var allowedToPod=checkPodAccess(loggerSvc, reqScope, foundCluster, podData, entityName, userEntityRef, userGroups)
+                        // we now check pod permission set
+                        var allowedToPod=checkPodAccess(loggerSvc, foundCluster, podData, podPermissionSet, entityName, userEntityRef, userGroups)
                         if (allowedToPod) {
                             // now we ask for an accessKey for the specific scope (typically 'view' or 'restart')
                             await setAccessKey(reqScope, foundCluster, podData, entityName, username, keyName);
@@ -207,8 +219,8 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
                     }
                 }
                 else {
-                    // user is not allowed to namespace, so don't need to check pod permissions, we finish
-                    break;
+                    // user is not allowed to namespace, so we don't need to check pod permissions
+                    // the loop cotinues with other pods
                 }
             }
         }
@@ -263,45 +275,54 @@ async function createRouter(options: KubelogRouterOptions): Promise<express.Rout
     // this is and API endpoint controller
     const processAccess = async (req:express.Request, res:express.Response) => {
         if (!req.query['scopes']) {
-            res.status(400).send();
-            return;
+            res.status(400).send()
+            return
         }
-        var reqScopes = (req.query['scopes'].toString()).split(',');
+        var reqScopes = (req.query['scopes'].toString()).split(',')
     
         // obtain basic user info
-        const credentials = await httpAuthSvc.credentials(req, { allow: ['user'] });
-        const userInfo = await userInfoSvc.getUserInfo(credentials);
+        const credentials = await httpAuthSvc.credentials(req, { allow: ['user'] })
+        const userInfo = await userInfoSvc.getUserInfo(credentials)
         // get user groups list
-        var userGroupsRefs=await getUserGroups(userInfo);
-    
+        var userGroupsRefs=await getUserGroups(userInfo)
+
+        loggerSvc.info(`Checking reqScopes '${req.query['scopes']}' scopes to pod: '${req.body.metadata.namespace+'/'+req.body.metadata.name}' for user '${userInfo.userEntityRef}'`)
+
         // get a list of clusters that contain pods related to entity
         //+++ control errors here (maybe we cannot conntact the cluster, for example)
-        var foundClusters:ClusterValidPods[]=await getValidClusters(req.body.metadata.name);
-    
+        var foundClusters:ClusterValidPods[]=await getValidClusters(req.body.metadata.name)
+        debug('foundClusters')
+        debug(foundClusters)
         // add access keys to authorized resources (according to group membership and kubelog config in app-config (namespace and pod permissions))
         for (var reqScopeStr of reqScopes) {
-            await addAccessKeys(reqScopeStr, foundClusters, req.body.metadata.name, userInfo.userEntityRef, userGroupsRefs, reqScopeStr+'AccessKey');
+            debug('')
+            debug('')
+            debug('')
+            debug('******************************')
+            debug('******** SCOPE '+reqScopeStr)
+            debug('******************************')
+            await addAccessKeys(reqScopeStr, foundClusters, req.body.metadata.name, userInfo.userEntityRef, userGroupsRefs, reqScopeStr+'AccessKey')
         }
     
-        res.status(200).send(foundClusters);
+        res.status(200).send(foundClusters)
     }
 
     // this endpoints receives entity from the kubelog plugin and builds a list of resurces with api keys
     router.post(['/start'], (req, res) => {
         //+++ warn only once
-        loggerSvc.warn('Endpoint "/start" is deprecated. Please update your front-end "plugin-kubelog" package to 0.9.2 or later before 2025-08-25.');
-        processStart(req,res);
-    });
+        loggerSvc.warn('Endpoint "/start" is deprecated. Please update your front-end "plugin-kubelog" package to 0.9.2 or later before 2025-08-25.')
+        processStart(req,res)
+    })
 
     router.post(['/access'], (req, res) => {
-        processAccess(req,res);
-    });
+        processAccess(req,res)
+    })
 
     router.get(['/version'], (req, res) => {
-        processVersion(req,res);
-    });
+        processVersion(req,res)
+    })
 
-    return router;
+    return router
 }
 
 export { createRouter }
