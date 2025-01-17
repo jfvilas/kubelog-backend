@@ -13,8 +13,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
-import { createRouter } from './service/router';
+import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api'
+import { createRouter } from './service/router'
 
 export const kubelogPlugin = createBackendPlugin({
     pluginId: 'kubelog',
@@ -43,4 +43,4 @@ export const kubelogPlugin = createBackendPlugin({
             }
         })
     }
-});
+})

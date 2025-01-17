@@ -14,8 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 import { LoggerService, RootConfigService } from '@backstage/backend-plugin-api'
-import { KubelogStaticData, KubelogClusterData, KubelogPodPermissions, PodPermissionRule } from '../model/KubelogStaticData'
+import { KubelogStaticData, MIN_KWIRTH_VERSION } from '../model/KubelogStaticData'
+import { KubelogClusterData, KubelogPodPermissions, PodPermissionRule } from '../model/KubelogClusterData'
 import { Config } from '@backstage/config'
+import { KwirthData, versionGreatOrEqualThan } from '@jfvilas/kwirth-common'
 
 /**
  * loads kubelogNamespacePermissions setting from app-config xml
@@ -24,12 +26,9 @@ import { Config } from '@backstage/config'
  * @param kdata KwirtClusterData being processed
  */
 const loadNamespacePermissions = (logger:LoggerService, cluster:Config, kdata:KubelogClusterData) => {
-    if (cluster.has('kwirthNamespacePermissions') || cluster.has('kubelogNamespacePermissions')) {
-        if (cluster.has('kwirthNamespacePermissions')) {
-            logger.warn('"kwirthNamespacePermissions" is deprecated, it will be retired on 2025-08-25. Please use name "kubelogNamespacePermissions".')
-        }
+    if (cluster.has('kubelogNamespacePermissions')) {
         logger.info(`Namespace permisson evaluation will be performed for cluster ${cluster.getString('name')}.`)
-        var permNamespaces= (cluster.getOptionalConfigArray('kwirthNamespacePermissions') || cluster.getOptionalConfigArray('kubelogNamespacePermissions'))!
+        var permNamespaces= (cluster.getOptionalConfigArray('kubelogNamespacePermissions'))!
         for (var ns of permNamespaces) {
             var namespace=ns.keys()[0]
             var identityRefs=ns.getStringArray(namespace)
@@ -69,9 +68,9 @@ const loadPodRules = (config:Config, id:string) => {
 
 /**
  * loads pod log viewing permissions setting from app-config xml
+ * @param configKey then name of the key (inside app-config) to read config from
  * @param logger Logger service
  * @param cluster Cluster config as it is read form app-config
- * @param kdata KwirtClusterData being processed
  */
 const loadPodPermissions = (configKey:string, logger:LoggerService, cluster:Config) => {
     var clusterPodPermissions:KubelogPodPermissions[]=[]
@@ -118,18 +117,11 @@ const loadClusters = async (logger:LoggerService, config:RootConfigService) => {
       for (var cluster of clusters) {
 
         var name=cluster.getString('name')
-        if ((cluster.has('kwirthHome') || cluster.has('kubelogKwirthHome')) && (cluster.has('kwirthApiKey') || cluster.has('kubelogKwirthApiKey'))) {
-            if (cluster.has('kwirthHome')) {
-                logger.warn('"kwirthHome" is deprecated, it will be retired on 2025-08-25. Please use name "kubelogHome".')
-            }
-            if (cluster.has('kwirthApiKey')) {
-                logger.warn('"kwirthApiKey" is deprecated, it will be retired on 2025-08-25. Please use name "kubelogApiKey".')
-            }
-    
-            var home=(cluster.getOptionalString('kwirthHome') || cluster.getOptionalString('kubelogKwirthHome'))!
-            var apiKeyStr=(cluster.getOptionalString('kwirthApiKey') || cluster.getOptionalString('kubelogKwirthApiKey'))!
-            var title=(cluster.has('title')?cluster.getString('title'):'No name')
-            var kcdata:KubelogClusterData={
+        if (cluster.has('kubelogKwirthHome') && cluster.has('kubelogKwirthApiKey')) {   
+            var home:string = (cluster.getOptionalString('kwirthHome') || cluster.getOptionalString('kubelogKwirthHome'))!
+            var apiKeyStr:string = (cluster.getOptionalString('kwirthApiKey') || cluster.getOptionalString('kubelogKwirthApiKey'))!
+            var title:string = (cluster.has('title')?cluster.getString('title'):'No name')
+            var kubelogClusterData:KubelogClusterData={
                 name,
                 kwirthHome: home,
                 kwirthApiKeyStr: apiKeyStr,
@@ -138,50 +130,74 @@ const loadClusters = async (logger:LoggerService, config:RootConfigService) => {
                     clusterName: '',
                     inCluster: false,
                     namespace: '',
-                    deployment: ''
+                    deployment: '',
+                    lastVersion: ''
                 },
                 title,
                 namespacePermissions: [],
                 viewPermissions: [],
-                restartPermissions: []
+                restartPermissions: [],
+                enabled: false
             }
 
-            logger.info(`Kwirth for ${name} is located at ${kcdata.kwirthHome}.`)
+            logger.info(`Kwirth for ${name} is located at ${kubelogClusterData.kwirthHome}. Testing connection...`)
+            let enableCluster = false
             try {
-                var response = await fetch (kcdata.kwirthHome+'/config/version');
+                /*
+                    /config/version endpoint returns JSON (KwirthData object):
+                    {
+                        "clusterName": "inCluster",
+                        "namespace": "default",
+                        "deployment": "kwirth",
+                        "inCluster": true,
+                        "version": "0.2.213",
+                        "lastVersion": "0.2.213"
+                    }
+                */
+                var response = await fetch (kubelogClusterData.kwirthHome+'/config/version')
                 try {
-                    var data = await response.text();
+                    var data = await response.text()
                     try {
-                        var kwrithData=JSON.parse(data)
-                        logger.info(`Kwirth info at cluster '${kcdata.name}': ${JSON.stringify(kwrithData)}`)
-                        kcdata.kwirthData=kwrithData
+                        var kwirthData=JSON.parse(data) as KwirthData
+                        logger.info(`Kwirth info at cluster '${kubelogClusterData.name}': ${JSON.stringify(kwirthData)}`)
+                        kubelogClusterData.kwirthData=kwirthData
+                        if (versionGreatOrEqualThan(kwirthData.version, MIN_KWIRTH_VERSION)) {
+                            enableCluster = true
+                        }
+                        else {
+                            logger.error(`Unsupported Kwirth version on cluster '${name}' (${title}) [${kwirthData.version}]. Min version is ${MIN_KWIRTH_VERSION}`)
+                        }
                     }
                     catch (err) {
-                        logger.error(`Kwirth at cluster ${kcdata.name} returned errors: ${err}`)
+                        logger.error(`Kwirth at cluster ${kubelogClusterData.name} returned errors: ${err}`)
+                        logger.info('Returned data is:')
                         logger.info(data)
-                        kcdata.kwirthData = {
-                            version:'0.8.29',
+                        kubelogClusterData.kwirthData = {
+                            version:'0.0.0',
                             clusterName:'unknown',
                             inCluster:false,
                             namespace:'unknown',
-                            deployment:'unknown'
+                            deployment:'unknown',
+                            lastVersion:'0.0.0'
                         }
                     }
                 }
                 catch (err) {
-                    logger.warn(`Error parsing version response from cluster '${kcdata.name}': ${err}`)
+                    logger.warn(`Error parsing version response from cluster '${kubelogClusterData.name}': ${err}`)
                 }
             }
             catch (err) {
                 logger.info(`Kwirth access error: ${err}.`)
-                logger.warn(`Kwirth home URL (${kcdata.kwirthHome}) at cluster '${kcdata.name}' cannot be accessed rigth now.`)
+                logger.warn(`Kwirth home URL (${kubelogClusterData.kwirthHome}) at cluster '${kubelogClusterData.name}' cannot be accessed right now.`)
             }
 
-            // we now read and format permissions according to destination structure inside KubelogClusterData
-            loadNamespacePermissions(logger, cluster, kcdata)
-            kcdata.viewPermissions=loadPodPermissions('kubelogPodViewPermissions',logger, cluster)
-            kcdata.restartPermissions=loadPodPermissions('kubelogPodRestartPermissions', logger, cluster)
-            KubelogStaticData.clusterKubelogData.set(name,kcdata)
+            if (enableCluster) {
+                // we now read and format permissions according to destination structure inside KubelogClusterData
+                loadNamespacePermissions(logger, cluster, kubelogClusterData)
+                kubelogClusterData.viewPermissions=loadPodPermissions('kubelogPodViewPermissions',logger, cluster)
+                kubelogClusterData.restartPermissions=loadPodPermissions('kubelogPodRestartPermissions', logger, cluster)
+                KubelogStaticData.clusterKubelogData.set(name, kubelogClusterData)
+            }
         }
         else {
             logger.warn(`Cluster ${name} has no Kwirth information (kubelogHome and kubelogApiKey are missing). It will not be used for Kubelog log viewing.`)

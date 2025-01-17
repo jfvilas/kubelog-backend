@@ -13,9 +13,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-import { LoggerService } from "@backstage/backend-plugin-api";
 import { ClusterValidPods, PodData } from "@jfvilas/plugin-kubelog-common";
-import { KubelogClusterData, KubelogPodPermissions, KubelogStaticData, PodPermissionRule } from "../model/KubelogStaticData";
+import { KubelogClusterData, KubelogPodPermissions, PodPermissionRule } from "../model/KubelogClusterData";
+import { KubelogStaticData } from "../model/KubelogStaticData";
 
 export enum KWIRTH_SCOPE {
     filter=1,
@@ -25,72 +25,70 @@ export enum KWIRTH_SCOPE {
     cluster
 }
 
-const DEBUG=undefined
 const debug = (a:any)  => {
-    if (DEBUG) console.log(a);
+    if (process.env.KUBELOGDEBUG) console.log(a)
 }
 
-const checkNamespaceAccess = (cluster:ClusterValidPods, podData:PodData, userEntityRef:string, userGroups:string[]):boolean => {
-    var namespacePermissions=KubelogStaticData.clusterKubelogData.get(cluster.name)?.namespacePermissions;
-    var allowedToNamespace=false;
+const checkNamespaceAccess = (cluster:ClusterValidPods, podData:PodData, userEntityRef:string, userGroups:string[]) : boolean => {
+    var namespacePermissions=KubelogStaticData.clusterKubelogData.get(cluster.name)?.namespacePermissions
+    var allowedToNamespace=false
 
-    var rule=namespacePermissions?.find(ns => ns.namespace===podData.namespace);
+    var rule=namespacePermissions?.find(ns => ns.namespace===podData.namespace)
     if (rule) {
         debug('CNA rule found '+rule.namespace)
         if (rule.identityRefs.includes(userEntityRef.toLowerCase())) {
             // a user ref has been found on a namespace rule
-            allowedToNamespace=true;
+            allowedToNamespace=true
         }
         else {
             var groupResult=rule.identityRefs.some(identityRef => userGroups.includes(identityRef));
             if (groupResult) {
                 // a group ref match has been found
-                allowedToNamespace=true;
+                allowedToNamespace=true
             }
         }
     }
     else {
         // no restrictions for this namespace
         debug('CNA rule NOT found for '+podData.namespace)
-        allowedToNamespace=true;
+        allowedToNamespace=true
     }
-    return allowedToNamespace;
+    return allowedToNamespace
 }
 
-//const checkPodPermissionRule = (ppr:PodPermissionRule, reqPod:PodData, entityName:string, userEntityRef:string, userGroups:string[]):boolean => {
-const checkPodPermissionRule = (ppr:PodPermissionRule, entityName:string, userEntityRef:string, userGroups:string[]):boolean => {
+const checkPodPermissionRule = (ppr:PodPermissionRule, entityName:string, userEntityRef:string, userGroups:string[]) : boolean => {
     var refMatch:boolean=false;
 
     for (var podNameRegex of ppr.pods) {
         if (podNameRegex.test(entityName)) {
             for (var refRegex of ppr.refs) {
                 // find userRef
-                refMatch=refRegex.test(userEntityRef.toLowerCase());
+                refMatch=refRegex.test(userEntityRef.toLowerCase())
                 if (refMatch) {
                     break;
                 }
                 else {
                     // find group ref
-                    refMatch = userGroups.some(g => refRegex.test(g));
+                    refMatch = userGroups.some(g => refRegex.test(g))
                     if (refMatch) {
-                        break;
+                        break
                     }
                 }
             }
         }
         else {
         }
-        if (refMatch) break;
+        if (refMatch) break
     }
-    return refMatch;
+    return refMatch
 }
 
 const getPodPermissionSet = (reqScope:KWIRTH_SCOPE, cluster:KubelogClusterData) => {
     switch (reqScope) {
         case KWIRTH_SCOPE.view:
-            return cluster.viewPermissions;
+            return cluster.viewPermissions
         case KWIRTH_SCOPE.restart:
-            return cluster.restartPermissions;
+            return cluster.restartPermissions
     }
     return undefined
 }
@@ -106,14 +104,16 @@ const getPodPermissionSet = (reqScope:KWIRTH_SCOPE, cluster:KubelogClusterData) 
  * @param userGroups ana array containing a list of groups the user belongs to
  * @returns booelan indicating if the user can access the pod for doing what scaope says (view or restart)
  */
-const checkPodAccess = (loggerSvc:LoggerService, reqCluster:ClusterValidPods, reqPod:PodData, podPermissionSet:KubelogPodPermissions[], entityName:string, userEntityRef:string, userGroups:string[]):boolean => {
-    var cluster = KubelogStaticData.clusterKubelogData.get(reqCluster.name);
 
-    if (!cluster) {
-        loggerSvc.warn(`Invalid cluster specified ${reqCluster.name}`);
-        return false;
-    }
+// const checkPodAccess = (loggerSvc:LoggerService, reqCluster:ClusterValidPods, reqPod:PodData, podPermissionSet:KubelogPodPermissions[], entityName:string, userEntityRef:string, userGroups:string[]):boolean => {
+//     var cluster = KubelogStaticData.clusterKubelogData.get(reqCluster.name)
 
+//     if (!cluster) {
+//         loggerSvc.warn(`Invalid cluster specified ${reqCluster.name}`)
+//         return false
+//     }
+
+const checkPodAccess = (reqPod:PodData, podPermissionSet:KubelogPodPermissions[], entityName:string, userEntityRef:string, userGroups:string[]):boolean => {
     // we check all pod permissions until one of them evaluates to true (must be true on allow/except and false on deny/unless)
 
     // we use 'filter' here beacause a namespace can be specified more than once
@@ -132,10 +132,10 @@ const checkPodAccess = (loggerSvc:LoggerService, reqCluster:ClusterValidPods, re
                     // we test all except rules, will stop if found one that matches, no need to continue
                     for (var prr of podPermission.except) {
                         //exceptMatches = checkPodPermissionRule(prr, reqPod, entityName, userEntityRef, userGroups);
-                        exceptMatches = checkPodPermissionRule(prr, entityName, userEntityRef, userGroups);
+                        exceptMatches = checkPodPermissionRule(prr, entityName, userEntityRef, userGroups)
                         // if there is a exception the process finishes now for this podPermission)
                         if (exceptMatches) {
-                            break;
+                            break
                         }
                     }
                 }
@@ -183,7 +183,7 @@ const checkPodAccess = (loggerSvc:LoggerService, reqCluster:ClusterValidPods, re
         }
     }
     
-    return false;
+    return false
 }
 
 export { checkNamespaceAccess, checkPodAccess, getPodPermissionSet }

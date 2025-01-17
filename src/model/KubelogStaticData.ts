@@ -1,4 +1,4 @@
-import { KwirthData } from "@jfvilas/kwirth-common";
+import { KubelogClusterData } from "./KubelogClusterData"
 
 /*
 Copyright 2024 Julio Fernandez
@@ -15,74 +15,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-const VERSION='0.9.0';
-
-type KubelogNamespacePermissions = {
-    namespace:string;
-    identityRefs:string[];
-}
-
-/*
-    SAMPLE Values
-
-    {
-        home: 'http://localhost/kwirth',
-        apiKey: 'dce1611c-b3d8-6d90-3507-64046112044e|permanent|cluster::::',
-        title: 'Kubernetes local',
-        namespacePermissions: [ { namespace: 'pre', identityRefs: [Array] } ],
-        viewPermissions: [
-            { namespace: 'test', allow: [Map] },
-            { namespace: 'pre', restrict: [Map] },
-            { namespace: 'staging', allow: [Map], restrict: [Map]  },
-            { namespace: 'corporate', allow: [Map] },
-            { namespace: 'pro', allow: [Map], restrict: [Map] }
-        ],
-        restartPermissions: [
-            { namespace: 'dev', allow: [Map], restrict: [Map], restrict: [Map] },
-            { namespace: 'pre', allow: [Map], restrict: [Map] }
-        ]
-    }    
-*/
-
-/**
- * @field pods: an array of RegExp build from the expressions that indentify pods
- * @field refs: an array of RegExp build from the expressions that indentify refs
- */
-export type PodPermissionRule = {
-    pods: RegExp[]
-    refs: RegExp[]
-}
-
-/**
- * @type KubelogNamespacedPodPermissions is the whole permissions that must be checked for a pod access in order to execute an action (view, restart...)
- * @field namespace is the namespace where this permission set must be applied (permissions maybe different for different namespaces, obviously)
- * @field allow: at least un rule in the allow must be fulfilled for the user to have access to the pod
- * @field except: if, after processsing 'allow', a rule in the except set evaluates to false the access is not allowed
- * @field deny: if a rule in the deny set evaluates to true then the access is denied
- * @field unless: if, after processing 'deny', we found at least one 'unless' rule that evaluates to true, access is granted
- */
-export type KubelogPodPermissions = {
-    namespace:string;
-    allow?: PodPermissionRule[];
-    except?:PodPermissionRule[];
-    deny?:PodPermissionRule[];
-    unless?:PodPermissionRule[];
-}
-
-export type KubelogClusterData = {
-    name: string
-    kwirthData: KwirthData
-    kwirthHome: string
-    kwirthApiKeyStr: string
-    title: string
-    namespacePermissions: KubelogNamespacePermissions[]
-    viewPermissions: KubelogPodPermissions[]
-    restartPermissions: KubelogPodPermissions[]
-}
+const VERSION='0.10.1'
+const MIN_KWIRTH_VERSION='0.2.213'
 
 class KubelogStaticData {
-    public static clusterKubelogData:Map<string,KubelogClusterData>= new Map()
+    public static clusterKubelogData : Map<string,KubelogClusterData> = new Map()
 }
 
-
-export { KubelogStaticData, VERSION }
+export { KubelogStaticData, VERSION, MIN_KWIRTH_VERSION }
