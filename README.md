@@ -3,6 +3,8 @@ This Backstage plugin is the backend for the Kubelog (Kubernetes log viewing) fr
 
 **NOTE: Starting with Kubelog 0.10.1, Kwirth required version is at least 0.2.213**
 
+**NOTE: Starting with Kubelog 0.11.1, Kwirth required version is at least 0.3.128**
+
 Please refer to [Kubelog Plugin](https://github.com/jfvilas/kubelog) general info to understand what is Kubelog, what are its requirements and how does it work.
 
 This [Backstage]((https://backstage.io)) backend plugin is primarily responsible for the following tasks:
