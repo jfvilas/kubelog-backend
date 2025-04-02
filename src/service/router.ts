@@ -210,7 +210,7 @@ async function createRouter(options: KubelogRouterOptions) : Promise<express.Rou
                     }
                     else {
                         // we now check pod permission set
-                        var allowedToPod=checkPodAccess(podData, podPermissionSet, entityName, userEntityRef, userGroups)
+                        var allowedToPod = checkPodAccess(podData, podPermissionSet, entityName, userEntityRef, userGroups)
                         if (allowedToPod) {
                             // now we ask for an accessKey for the specific scope (typically 'view' or 'restart')
                             await setAccessKey(reqScope, foundCluster, podData, username, keyName);
