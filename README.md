@@ -3,6 +3,8 @@ This Backstage plugin is the backend for the Kubelog (Kubernetes log viewing) fr
 
 **NOTE: Starting with Kubelog 0.10.1, Kwirth required version is at least 0.2.213**
 
+**NOTE: Starting with Kubelog 0.11.1, Kwirth required version is at least 0.3.128**
+
 Please refer to [Kubelog Plugin](https://github.com/jfvilas/kubelog) general info to understand what is Kubelog, what are its requirements and how does it work.
 
 This [Backstage]((https://backstage.io)) backend plugin is primarily responsible for the following tasks:
@@ -74,7 +76,7 @@ kubernetes:
           skipMetricsLookup: true
 ```
 
-We need to add 2 properties to the cluster configuration:
+We need to add (at least) 2 properties to the cluster configuration:
 - kubelogKwirthHome: the home URL of the Kwirth installation.
 - kubelogKwirthApiKey: The API key we created before.
 
@@ -111,10 +113,10 @@ So, the permission system has been build using (right now) two layers:
 
 
 #### Namespace layer
-Let's suppose that in your clusters you have 3 namespaces:
+Let's suppose that you have 3 namespaces in your cluster:
   - dev, for development workloads
-  - stage: for canary deployments, a/b testing and so on 
-  - production: for productive workloads
+  - stage, for canary deployments, a/b testing and so on 
+  - production, for productive workloads
 
 Typically you would restrict access to logs in such a way that:
   - Everybody should be able to view developoment (dev) logs.
@@ -146,13 +148,13 @@ Once you have created the groups you can configure the namespace permission addi
 ```
 
 It's easy to understand:
-  1. Everybody can access 'dev' namespace, since we have stated no restrictions at all.
+  1. Everybody can access 'dev' namespace, since we have stated no restrictions at all (we added no 'dev' namespace in the app-config)
   2. 'stage' namespace can be accessed by group 'devops' and group 'admin'.
   3. The 'production' namespace can be accesed by the group of administrators ('admin') and the user Nicklaus Wirth.
   
 Remember, if you don't want to restrict a namespace, just do not add it to the configuration in app-config file, like we have done with 'dev' namespace.
 
-When a user working with Backstage enters Kubelog tab (in the entity page) he will see a list of clusters. If he selects a cluster a list of namespaces will be shown, that is, all namespaces that do contain pods tagged with the current entity id. If the user has no permission to a specific namespace, the namespace will be shown in <span style='color:red'>red</span> and will not be accesible. Allowed namespaced will be shown in <span style='color:blue'>**primary color**</span> and will be 'clickable'.
+When a user working with Backstage enters Kubelog tab (in the entity page) he will see a list of clusters. When he selects a cluster, a list of namespaces will be shown, that is, all namespaces that do contain pods tagged with the current entity id. If the user has no permission to a specific namespace, the namespace will be shown in <span style='color:red'>red</span> and will not be accesible. Allowed namespaced will be shown in <span style='color:blue'>**primary color**</span> and will be 'clickable'.
 
 
 #### Pod permissions
@@ -172,9 +174,9 @@ Let's consider a simple view-scoped pod permission sample based on previously de
           title: 'Kubernetes local'
           kubelogKwirthHome: http://your-external.dns.name/kwirth
           kubelogKwirthApiKey: '40f5ea6c-bac3-df2f-d184-c9f3ab106ba9|permanent|cluster::::'
-         kubelogNamespacePermissions:
-           - stage: ['group:default/devops', 'group:default/admin']
-           - production: ['group:default/admin', 'user:default/nicklaus-wirth']
+          kubelogNamespacePermissions:
+            - stage: ['group:default/devops', 'group:default/admin']
+            - production: ['group:default/admin', 'user:default/nicklaus-wirth']
           authProvider: 'serviceAccount'
           skipTLSVerify: true
           skipMetricsLookup: true
@@ -207,7 +209,7 @@ About this example and about 'how to configure kubelog pod permissions':
   - **kubelogPodViewPermissions** is the section name for refining pod permission for viewing logs.
   - The main content of this section is a list of namespaces (like 'dev' in the sample).
   - The content of each namespace is a rule system that works this way:
-    - Rules can be defined following a fixed schema by which you can **allow** or **deny** access to a set of pods to a set of identity references (users or groups)
+    - Rules can be defined following a fixed schema by which you can **allow** or **deny** access to a set of pods from a set of identity references (users or groups)
     - 'allow' can be refined by adding exceptions by means of 'except' keyword.
     - 'deny' can be refined by adding exceptions by means of 'unless' keyword.
     - The order of evaluation of rules is:
@@ -219,16 +221,16 @@ About this example and about 'how to configure kubelog pod permissions':
        6. If a deny rule matches, then Kueblog will search for any 'unless' rule that matches. I no unless rule match exists, the access is denied and the process finishes here.
        7. If there exists an 'unless' rule then the access is granted.
     - It's important to note that 'allow' and 'deny' are optional, but if you dont specify them, they will match anything.
- - It is most important to know that if a namespace is not spscified, the access is granted.
+ - It is most important to know that if a namespace is not specified, the access is granted.
 
 So, in our example:
   - Access to 'dev' is granted, since 'dev' namespace is not specified.
   - Access to 'stage' works this way:
     - *Everybody can access pods whose name starts with 'common-'* (remember, **we always use regexes**). We have added no 'refs', so any identity ref matches.
-    - *Nobody can access pod named 'keys'* (pay attention to the refs set to '[]', that is no identity ref can access)
-    - *Admins and people on namespace 'test' can access any pod whose name starts with 'ef'*. The 'pods' contians a regex with '^ef.*' (starts with 'ef' and contain any number of characters afterwards). The identity refs that can access pods that match with this pod regex are the group of admins on any Backstage namespace ('group:.+/admin') and all the people that belongs to Backstage group 'test' (group:test/.+).
-    - *'Everybody can access pods whose name ends with 'th'*. That is, the regex in pods is 'th$' (names ending with 'th'), and the refs contains '.*', that is, any number of characters, so there are no limits on the refs, everybody is included.
-    - *But... if the pod name is 'kwirth' only admis can access*. This refers to the 'except' section, which is a refinement of the allow. Although the previous rule says *everybody acan access pods ending with 'th'*, this is true **except** for the pod name 'kwirth', which can only be accesed by 'admins in the default' group or 'Nicklaus Wirth'.
+    - *Nobody can access pod named 'keys'* (pay attention to the refs set to '[]', that means **no identity ref can access**)
+    - *Admins and people on namespace 'test' can access any pod whose name starts with 'ef'*. The 'pods' contains a regex with '^ef.*' (starts with 'ef' and contain any number of characters afterwards). The identity refs that can access pods that match with this pod regex are the group of admins on any Backstage namespace ('group:.+/admin') and all the people that belongs to Backstage group 'test' (group:test/.+).
+    - *Everybody can access pods whose name ends with 'th'*. That is, the regex in pods is 'th$' (names ending with 'th'), and the refs contains '.*', that is, any number of characters, so there are no limits on the refs, everybody is included (it is the same behaviour as not adding the 'refs', everybody can)
+    - *But... if the pod name is 'kwirth' only admis can access*. This refers to the 'except' section, which is a refinement of the allow. Although the previous rule says *everybody can access pods ending with 'th'*, this is true **except** for the pod name 'kwirth', which can only be accesed by 'admins in the default' group or 'Nicklaus Wirth'.
 
 Let's complete the example with the other namespaces declared:
   - *Nobody can access pods in 'production' namespace*. The 'production' namespace doesn't have an 'allow' section, it ony contains a 'deny'. In addition, the 'deny' section only contains a 'refs' section (all pod names would match, since no 'pods' section means 'pods: [.*]', that is, all pod names match). The 'refs' inside the 'deny' contains '.*', what means every ref would match, so, finally, *nobody can access a pod*.
@@ -276,4 +278,4 @@ Where:
       - 'type' is one of 'user' or 'group',
       - 'namespace' is a Backstage namespace (not Kubernetes namespace).
       - 'id' is a reference id, like a user name or a group name.
-  - You can repeat NAMESPACE, in order to have different sections make your config readable if you have lots of rules.
+  - You can repeat NAMESPACE, in order to have different sections that make your config readable if you have lots of rules.
