@@ -108,14 +108,20 @@ async function createRouter(options: KubelogRouterOptions) : Promise<express.Rou
 
         for (const name of KubelogStaticData.clusterKubelogData.keys()) {
             var url=KubelogStaticData.clusterKubelogData.get(name)?.kwirthHome as string
-            var apiKeyStr=KubelogStaticData.clusterKubelogData.get(name)?.kwirthApiKeyStr
+            var apiKeyStr=KubelogStaticData.clusterKubelogData.get(name)?.kwirthApiKey
             var title=KubelogStaticData.clusterKubelogData.get(name)?.title
             var queryUrl=url+`/managecluster/find?label=backstage.io%2fkubernetes-id&entity=${entityName}&type=pod&data=id`
+            debug('queryUrl')
+            debug(queryUrl)
             try {
                 var fetchResp = await fetch (queryUrl, {headers:{'Authorization':'Bearer '+apiKeyStr}})
                 if (fetchResp.status===200) {
                     var jsonResp=await fetchResp.json()
-                    if (jsonResp) clusterList.push({ name, url, title, data:jsonResp })
+                    if (jsonResp) {
+                        debug( 'jsonResp' )
+                        debug( jsonResp )
+                        clusterList.push({ name, url, title, data:jsonResp })
+                    }
                 }
                 else {
                     loggerSvc.warn(`Invalid response from cluster ${name}: ${fetchResp.status}`)
@@ -145,7 +151,7 @@ async function createRouter(options: KubelogRouterOptions) : Promise<express.Rou
     const setAccessKey = async (reqScope:KWIRTH_SCOPE, cluster:ClusterValidPods, reqPod:PodData, userName:string, keyName:string) => {
         var kwirthResource=`${KWIRTH_SCOPE[reqScope]}:${reqPod.namespace}::${reqPod.name}:`
         var url=KubelogStaticData.clusterKubelogData.get(cluster.name)?.kwirthHome as string
-        var apiKeyStr=KubelogStaticData.clusterKubelogData.get(cluster.name)?.kwirthApiKeyStr
+        var apiKeyStr=KubelogStaticData.clusterKubelogData.get(cluster.name)?.kwirthApiKey
 
         var payload={
             type:'volatile',
@@ -294,12 +300,6 @@ async function createRouter(options: KubelogRouterOptions) : Promise<express.Rou
         debug(foundClusters)
         // add access keys to authorized resources (according to group membership and kubelog config in app-config (namespace and pod permissions))
         for (var reqScopeStr of reqScopes) {
-            debug('')
-            debug('')
-            debug('')
-            debug('******************************')
-            debug('******** SCOPE '+reqScopeStr)
-            debug('******************************')
             await addAccessKeys(reqScopeStr, foundClusters, req.body.metadata.name, userInfo.userEntityRef, userGroupsRefs, reqScopeStr+'AccessKey')
         }
     

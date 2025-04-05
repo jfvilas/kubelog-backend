@@ -73,7 +73,7 @@ export type KubelogClusterData = {
     enabled: boolean
     kwirthData: KwirthData
     kwirthHome: string
-    kwirthApiKeyStr: string
+    kwirthApiKey: string
     title: string
     namespacePermissions: KubelogNamespacePermissions[]
     viewPermissions: KubelogPodPermissions[]

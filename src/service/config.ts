@@ -124,7 +124,7 @@ const loadClusters = async (logger:LoggerService, config:RootConfigService) => {
             var kubelogClusterData:KubelogClusterData={
                 name,
                 kwirthHome: home,
-                kwirthApiKeyStr: apiKeyStr,
+                kwirthApiKey: apiKeyStr,
                 kwirthData: {
                     version: '',
                     clusterName: '',
