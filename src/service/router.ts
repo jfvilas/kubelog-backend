@@ -153,13 +153,17 @@ async function createRouter(options: KubelogRouterOptions) : Promise<express.Rou
         var url=KubelogStaticData.clusterKubelogData.get(cluster.name)?.kwirthHome as string
         var apiKeyStr=KubelogStaticData.clusterKubelogData.get(cluster.name)?.kwirthApiKey
 
-        var payload={
-            type:'volatile',
-            resource: kwirthResource,
-            description:`Backstage API key for user ${userName} accessing pod ${reqPod.namespace}/${reqPod.name}`,
-            expire:Date.now()+60*60*1000
+        let apiKey = {
+            description: `Backstage API key for user ${userName} accessing pod ${reqPod.namespace}/${reqPod.name}`,
+            expire: Date.now()+60*60*1000,
+            accessKey: {
+                //id: '',
+                type:'volatile',
+                resources: kwirthResource
+            }
         }
-        var fetchResp=await fetch(url+'/key',{method:'POST', body:JSON.stringify(payload), headers:{'Content-Type':'application/json', Authorization:'Bearer '+apiKeyStr}})
+
+        var fetchResp=await fetch(url+'/key',{method:'POST', body:JSON.stringify(apiKey), headers:{'Content-Type':'application/json', Authorization:'Bearer '+apiKeyStr}})
         if (fetchResp.status===200) {
             var data = await fetchResp.json();
             (reqPod as any)[keyName]=data.accessKey

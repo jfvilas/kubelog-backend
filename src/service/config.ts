@@ -17,7 +17,7 @@ import { LoggerService, RootConfigService } from '@backstage/backend-plugin-api'
 import { KubelogStaticData, MIN_KWIRTH_VERSION } from '../model/KubelogStaticData'
 import { KubelogClusterData, KubelogPodPermissions, PodPermissionRule } from '../model/KubelogClusterData'
 import { Config } from '@backstage/config'
-import { KwirthData, versionGreatOrEqualThan } from '@jfvilas/kwirth-common'
+import { ClusterTypeEnum, KwirthData, versionGreatOrEqualThan } from '@jfvilas/kwirth-common'
 
 /**
  * loads kubelogNamespacePermissions setting from app-config xml
@@ -131,7 +131,8 @@ const loadClusters = async (logger:LoggerService, config:RootConfigService) => {
                     inCluster: false,
                     namespace: '',
                     deployment: '',
-                    lastVersion: ''
+                    lastVersion: '',
+                    clusterType: ClusterTypeEnum.KUBERNETES
                 },
                 title,
                 namespacePermissions: [],
@@ -178,7 +179,8 @@ const loadClusters = async (logger:LoggerService, config:RootConfigService) => {
                             inCluster:false,
                             namespace:'unknown',
                             deployment:'unknown',
-                            lastVersion:'0.0.0'
+                            lastVersion:'0.0.0',
+                            clusterType: ClusterTypeEnum.KUBERNETES
                         }
                     }
                 }
