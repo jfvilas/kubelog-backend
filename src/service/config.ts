@@ -132,7 +132,9 @@ const loadClusters = async (logger:LoggerService, config:RootConfigService) => {
                     namespace: '',
                     deployment: '',
                     lastVersion: '',
-                    clusterType: ClusterTypeEnum.KUBERNETES
+                    clusterType: ClusterTypeEnum.KUBERNETES,
+                    metricsInterval: 0,
+                    channels: []
                 },
                 title,
                 namespacePermissions: [],
@@ -145,17 +147,90 @@ const loadClusters = async (logger:LoggerService, config:RootConfigService) => {
             let enableCluster = false
             try {
                 /*
-                    /config/version endpoint returns JSON (KwirthData object):
+                    /config/info endpoint returns JSON:
                     {
                         "clusterName": "inCluster",
                         "namespace": "default",
                         "deployment": "kwirth",
                         "inCluster": true,
-                        "version": "0.2.213",
-                        "lastVersion": "0.2.213"
-                    }
+                        "version": "0.4.11",
+                        "lastVersion": "0.4.11",
+                        "clusterType": "kubernetes",
+                        "metricsInterval": 60,
+                        "channels": [
+                            {
+                                "id": "log",
+                                "routable": false,
+                                "pauseable": true,
+                                "modifyable": false,
+                                "reconnectable": true,
+                                "sources": [
+                                    "docker",
+                                    "kubernetes"
+                                ],
+                                "metrics": false
+                            },
+                            {
+                                "id": "alert",
+                                "routable": false,
+                                "pauseable": true,
+                                "modifyable": false,
+                                "reconnectable": true,
+                                "sources": [
+                                    "docker",
+                                    "kubernetes"
+                                ],
+                                "metrics": false
+                            },
+                            {
+                                "id": "metrics",
+                                "routable": false,
+                                "pauseable": true,
+                                "modifyable": true,
+                                "reconnectable": true,
+                                "sources": [
+                                    "kubernetes"
+                                ],
+                                "metrics": true
+                            },
+                            {
+                                "id": "ops",
+                                "routable": true,
+                                "pauseable": false,
+                                "modifyable": false,
+                                "reconnectable": false,
+                                "sources": [
+                                    "kubernetes"
+                                ],
+                                "metrics": false
+                            },
+                            {
+                                "id": "trivy",
+                                "routable": false,
+                                "pauseable": false,
+                                "modifyable": false,
+                                "reconnectable": false,
+                                "sources": [
+                                    "kubernetes"
+                                ],
+                                "metrics": false
+                            },
+                            {
+                                "id": "echo",
+                                "routable": false,
+                                "pauseable": true,
+                                "modifyable": false,
+                                "reconnectable": true,
+                                "metrics": false,
+                                "sources": [
+                                    "kubernetes",
+                                    "docker"
+                                ]
+                            }
+                        ]
+                    }                
                 */
-                var response = await fetch (kubelogClusterData.kwirthHome+'/config/version')
+                var response = await fetch (kubelogClusterData.kwirthHome+'/config/info')
                 try {
                     var data = await response.text()
                     try {
@@ -180,7 +255,9 @@ const loadClusters = async (logger:LoggerService, config:RootConfigService) => {
                             namespace:'unknown',
                             deployment:'unknown',
                             lastVersion:'0.0.0',
-                            clusterType: ClusterTypeEnum.KUBERNETES
+                            clusterType: ClusterTypeEnum.KUBERNETES,
+                            metricsInterval: 0,
+                            channels: []
                         }
                     }
                 }
@@ -202,7 +279,7 @@ const loadClusters = async (logger:LoggerService, config:RootConfigService) => {
             }
         }
         else {
-            logger.warn(`Cluster ${name} has no Kwirth information (kubelogHome and kubelogApiKey are missing). It will not be used for Kubelog log viewing.`)
+            logger.warn(`Cluster ${name} has no Kubelog information (kubelogHome and kubelogApiKey are missing). It will not be used for Kubelog log viewing.`)
         }
       }
     }

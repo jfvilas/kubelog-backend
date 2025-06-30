@@ -15,8 +15,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-const VERSION='0.11.1'
-const MIN_KWIRTH_VERSION='0.3.130'
+const VERSION='0.12.0'
+const MIN_KWIRTH_VERSION='0.4.11'
 
 class KubelogStaticData {
     public static clusterKubelogData : Map<string,KubelogClusterData> = new Map()
