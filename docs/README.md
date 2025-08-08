@@ -1,14 +1,22 @@
 # Backstage Kubelog plugin backend
 This Backstage plugin is the backend for the Kubelog (Kubernetes log viewing) frontend plugin.
 
-**NOTE: Version 0.9.5 implements pod restart, and requires Kwirth 0.2**
-
 **Please refer to [Kubelog Plugin](https://github.com/jfvilas/kubelog) general info to understand what is Kubelog, what are its requirements and how does it work.**
 
 This [Backstage]((https://backstage.io)) backend plugin is primarily responsible for the following tasks:
 
 - Reading Kueblog config from app-config
 - Validating login processes to remote Kwirth instances, and thus obtaining valid API keys for users to view logs or restart pods.
+
+## Version compatibility
+Following table shows version compatibility between Kubelog and Kwirth Core.
+
+| Plugin Kwirth version | Kwirth version |
+|-|-|
+|0.11.6|0.4.20|
+|0.11.1|0.3.160|
+|0.10.1|0.2.213|
+|0.9.5|0.2.8|
 
 ## Install
 
